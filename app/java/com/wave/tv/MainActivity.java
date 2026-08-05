@@ -58,7 +58,9 @@ public class MainActivity extends Activity {
 
     private static final String PREFS = "wavetv";
     private static final String KEY_STATIONS = "stations";
-    private static final String KEY_LAST = "lastStation";
+    /** Superseded by KEY_LAST_URL; still read once to migrate an old install. */
+    private static final String KEY_LAST_INDEX = "lastStation";
+    private static final String KEY_LAST_URL = "lastStationUrl";
     private static final String KEY_SLEEP_HOURS = "sleepHours";
     private static final String KEY_THEME_MODE = "themeMode";
     private static final int SLEEP_HOURS_DEFAULT = 6;
@@ -121,6 +123,10 @@ public class MainActivity extends Activity {
     private static final long KEYBOARD_SETTLE_MS = 1500;
     private long lastBackPress = 0;
     private boolean pageLoaded = false;
+    /** Last known audio state, so the sleep timer arms on the edge — see syncPlaybackState. */
+    private boolean audioLive = false;
+    /** True between loadStation() and that navigation landing — see onPageFinished. */
+    private boolean freshStationLoad = false;
     /** True when what's in the WebView is an error page rather than the player. */
     private boolean loadFailed = false;
     private String currentUrl = null;
@@ -176,6 +182,35 @@ public class MainActivity extends Activity {
     }
 
     private ArrayList<Station> stations = new ArrayList<>();
+
+    /**
+     * The station to come back to, held as a URL rather than a list position.
+     *
+     * As an index it went stale the moment the list changed: removing a
+     * station left the pointer aimed at whichever one slid into that slot, so
+     * BACK from the picker tuned the wrong station, and moveStation needed
+     * three lines of index arithmetic to keep it honest. A URL needs none of
+     * that, and simply resolves to nothing once its station is gone.
+     */
+    private String lastStationUrl() {
+        String url = prefs().getString(KEY_LAST_URL, null);
+        if (url != null) return url;
+        int i = prefs().getInt(KEY_LAST_INDEX, -1); // migrate an older install
+        return i >= 0 && i < stations.size() ? stations.get(i).url : null;
+    }
+
+    private void rememberLastStation(String url) {
+        prefs().edit().putString(KEY_LAST_URL, url).remove(KEY_LAST_INDEX).apply();
+    }
+
+    /** Where a station URL currently sits in the list, or -1 if it doesn't. */
+    private int indexOfUrl(String url) {
+        if (url == null) return -1;
+        for (int i = 0; i < stations.size(); i++) {
+            if (stations.get(i).url.equals(url)) return i;
+        }
+        return -1;
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -266,6 +301,18 @@ public class MainActivity extends Activity {
                     // This is the server's error page, not the player. Don't
                     // inject the remote layer or try to auto-tune into it.
                     return;
+                }
+                if (freshStationLoad) {
+                    freshStationLoad = false;
+                    // Tuning a station is a fresh start, not a step in a
+                    // browsing session. Each Retry from the error dialog
+                    // otherwise left another history entry, and BACK's
+                    // canGoBack() branch then walked back through the failed
+                    // attempts one at a time instead of reaching the picker.
+                    // Cleared only for the station's own load, so moving
+                    // around within the station still has somewhere to go back
+                    // to.
+                    view.clearHistory();
                 }
                 if (helperJs != null) js(helperJs);
                 // Picking a station is the "play" gesture — dismiss the player's
@@ -444,7 +491,7 @@ public class MainActivity extends Activity {
         header.addView(headings, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        addChip = buildChip("+  Add station", v -> showStationDialog(-1));
+        addChip = buildChip("+  Add station", v -> showStationDialog(null));
         header.addView(addChip, headerChipLp());
 
         themeChip = buildChip("", v -> cycleThemeMode());
@@ -1404,7 +1451,7 @@ public class MainActivity extends Activity {
     private void togglePlayFromList() {
         if (currentUrl == null || !pageLoaded) {
             int sel = stationsListView.getSelectedItemPosition();
-            if (sel < 0 || sel >= stations.size()) sel = prefs().getInt(KEY_LAST, 0);
+            if (sel < 0 || sel >= stations.size()) sel = indexOfUrl(lastStationUrl());
             if (sel >= 0 && sel < stations.size()) openStation(sel);
             return;
         }
@@ -1423,8 +1470,16 @@ public class MainActivity extends Activity {
             boolean playing = r != null && r.contains("true");
             setPlayGlyph(playing);
             setOnAir(playing);
-            if (playing) armSleepTimer();
-            else cancelSleepTimer();
+            // Arm on the edge, not on every reading. The now-playing poll calls
+            // this every 7 seconds while the picker is on screen, and
+            // armSleepTimer() begins by cancelling the pending one — so sitting
+            // on the station list with a station playing reset the countdown
+            // before it could ever elapse, and the sleep timer never fired at
+            // all. Leaving the app on the picker is exactly what someone
+            // falling asleep to the radio does.
+            if (playing && !audioLive) armSleepTimer();
+            else if (!playing) cancelSleepTimer();
+            audioLive = playing;
         });
     }
 
@@ -1449,8 +1504,8 @@ public class MainActivity extends Activity {
         // nowhere to go on first run; hand it to Add station instead.
         if (stations.isEmpty()) addChip.requestFocus();
         else stationsListView.requestFocus();
-        int last = prefs().getInt(KEY_LAST, 0);
-        if (last >= 0 && last < stations.size()) stationsListView.setSelection(last);
+        int last = indexOfUrl(lastStationUrl());
+        if (last >= 0) stationsListView.setSelection(last);
         ui.removeCallbacks(nowPlayingPoll);
         ui.post(nowPlayingPoll);
         probeStations();
@@ -1490,7 +1545,7 @@ public class MainActivity extends Activity {
     private void openStation(int index) {
         if (index < 0 || index >= stations.size()) return;
         Station st = stations.get(index);
-        prefs().edit().putInt(KEY_LAST, index).apply();
+        rememberLastStation(st.url);
         stationsPanel.setVisibility(View.GONE);
         ui.removeCallbacks(nowPlayingPoll);
         boolean wasLoaded = pageLoaded; // captured before the reload clears it
@@ -1532,6 +1587,7 @@ public class MainActivity extends Activity {
         pageLoaded = false;
         loadFailed = false;
         shownCoverId = null;
+        freshStationLoad = true;
         web.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
         web.loadUrl(url);
         // Back to normal caching once this navigation is under way, so ordinary
@@ -1611,15 +1667,38 @@ public class MainActivity extends Activity {
         return b;
     }
 
-    /** index -1 = add new; otherwise edit that station. */
-    private void showStationDialog(final int index) {
+    /**
+     * What is wrong with a typed address, or null if nothing is.
+     *
+     * A station URL is concatenated with "api/…" in four places, so anything
+     * carrying a query or fragment quietly produces a nonsense endpoint —
+     * "host/#x" becomes "http://host/#x/api/now-playing", which is a request
+     * to the root. A path is fine and deliberately allowed; a station may well
+     * live at example.com/radio. Userinfo is refused outright: to a reader
+     * "station.local@evil.com" is the station, and to a URL parser it is not.
+     */
+    private static String addressProblem(String host) {
+        if (host.isEmpty()) return "A station needs an address";
+        if (host.indexOf('@') >= 0) return "An address can't contain “@”";
+        if (host.indexOf('?') >= 0 || host.indexOf('#') >= 0) {
+            return "An address can't contain “?” or “#”";
+        }
+        if (host.indexOf(' ') >= 0 || host.indexOf('\t') >= 0) {
+            return "An address can't contain spaces";
+        }
+        if (hostOf("http://" + host) == null) return "That doesn't look like an address";
+        return null;
+    }
+
+    /** A null station means add new; otherwise edit that one. */
+    private void showStationDialog(final Station editing) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setBackgroundColor(palette.bg);
         box.setPadding(dp(28), dp(20), dp(28), dp(14));
 
         TextView heading = new TextView(this);
-        heading.setText(index < 0 ? "ADD STATION" : "EDIT STATION");
+        heading.setText(editing == null ? "ADD STATION" : "EDIT STATION");
         heading.setTextColor(palette.ink);
         heading.setTextSize(19);
         heading.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
@@ -1673,11 +1752,10 @@ public class MainActivity extends Activity {
         final EditText hostIn = dlgField("192.168.1.x:7700  or  radio.example.com");
         box.addView(hostIn, urlLp);
 
-        if (index >= 0) {
-            Station st = stations.get(index);
-            nameIn.setText(st.name);
-            useHttps[0] = st.url.startsWith("https://");
-            hostIn.setText(st.url.replaceFirst("^https?://", ""));
+        if (editing != null) {
+            nameIn.setText(editing.name);
+            useHttps[0] = editing.url.startsWith("https://");
+            hostIn.setText(editing.url.replaceFirst("^https?://", ""));
         }
         styleScheme.run();
 
@@ -1698,15 +1776,16 @@ public class MainActivity extends Activity {
 
         final Runnable commit = () -> {
             String host = hostIn.getText().toString().trim().replaceFirst("^https?://", "");
-            if (host.isEmpty()) {
-                Toast.makeText(this, "A station needs an address", Toast.LENGTH_SHORT).show();
+            String problem = addressProblem(host);
+            if (problem != null) {
+                Toast.makeText(this, problem, Toast.LENGTH_SHORT).show();
                 return;
             }
             // Drop the IME while its own field still exists; once the dialog
             // window is gone there is no token to hide it from, and it sits
             // over the picker swallowing every remote key.
             hideKeyboardFrom(hostIn);
-            saveStation(index, nameIn.getText().toString().trim(), host, useHttps[0]);
+            saveStation(editing, nameIn.getText().toString().trim(), host, useHttps[0]);
             dlg.dismiss();
         };
 
@@ -1761,19 +1840,24 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** The Save half of the add/edit dialog. index -1 = add new. */
-    private void saveStation(int index, String name, String host, boolean useHttps) {
+    /** The Save half of the add/edit dialog. A null station means add new. */
+    private void saveStation(Station editing, String name, String host, boolean useHttps) {
         String url = (useHttps ? "https://" : "http://") + host;
         boolean autoName = name.isEmpty();
         if (autoName) name = host; // placeholder until the station answers
-        if (index < 0) {
+        if (editing == null) {
             stations.add(new Station(name, url));
         } else {
-            Station st = stations.get(index);
-            String oldUrl = st.url;
-            st.name = name;
-            st.url = url;
+            // Identity, not the position captured when the dialog opened: the
+            // list can have been reordered or emptied underneath it, and
+            // writing back by index would edit somebody else.
+            if (!stations.contains(editing)) return;
+            String oldUrl = editing.url;
+            editing.name = name;
+            editing.url = url;
             if (!oldUrl.equals(url)) {
+                if (oldUrl.equals(lastStationUrl())) rememberLastStation(url);
+                unreachable.remove(oldUrl); // the old address is nobody's now
                 // Carry any saved password to the new address, and make
                 // sure a station being edited while on air reloads rather
                 // than leaving the card polling the old host.
@@ -1783,9 +1867,7 @@ public class MainActivity extends Activity {
                 e.apply();
                 if (oldUrl.equals(currentUrl)) {
                     currentUrl = url;
-                    pageLoaded = false;
-                    shownCoverId = null;
-                    if (web != null) web.loadUrl(url);
+                    loadStation(url); // same path as tuning it, cache-bust and all
                 }
             }
         }
@@ -1799,7 +1881,15 @@ public class MainActivity extends Activity {
         if (autoName) fetchStationName(url);
     }
 
+    /**
+     * The hold-OK menu. Everything past this point works on the Station object
+     * rather than the position it was opened at: the Remove path in particular
+     * puts a second dialog between the choice and the deletion, and by the time
+     * that is answered the captured index may belong to a different station —
+     * or to none, which threw.
+     */
     private void showStationOptions(final int index) {
+        if (index < 0 || index >= stations.size()) return;
         final Station st = stations.get(index);
         // "Forget saved password" only appears for a station that has one.
         final boolean hasSaved = savedAuth(st.url) != null;
@@ -1816,25 +1906,20 @@ public class MainActivity extends Activity {
                 .setItems(items.toArray(new String[0]), (d, which) -> {
                     String choice = items.get(which);
                     if (choice.equals("Tune in")) {
-                        openStation(index);
+                        openStation(stations.indexOf(st));
                     } else if (choice.equals("Edit")) {
-                        showStationDialog(index);
+                        showStationDialog(st);
                     } else if (choice.equals("Move up")) {
-                        moveStation(index, index - 1);
+                        moveStation(st, -1);
                     } else if (choice.equals("Move down")) {
-                        moveStation(index, index + 1);
+                        moveStation(st, 1);
                     } else if (choice.equals("Forget saved password")) {
                         prefs().edit().remove(authKey(st.url)).apply();
                         Toast.makeText(this, "Saved password forgotten", Toast.LENGTH_SHORT).show();
                     } else {
                         new AlertDialog.Builder(this)
                                 .setMessage("Remove “" + st.name + "”?")
-                                .setPositiveButton("Remove", (d2, w2) -> {
-                                    prefs().edit().remove(authKey(st.url)).apply();
-                                    stations.remove(index);
-                                    saveStations();
-                                    refreshStationList();
-                                })
+                                .setPositiveButton("Remove", (d2, w2) -> removeStation(st))
                                 .setNegativeButton("Cancel", null)
                                 .show();
                     }
@@ -1842,15 +1927,24 @@ public class MainActivity extends Activity {
                 .show();
     }
 
-    /** Reorder the list, keeping the "last played" pointer on the same station. */
-    private void moveStation(int from, int to) {
-        if (to < 0 || to >= stations.size()) return;
-        Station moved = stations.remove(from);
-        stations.add(to, moved);
-        int last = prefs().getInt(KEY_LAST, 0);
-        if (last == from) prefs().edit().putInt(KEY_LAST, to).apply();
-        else if (last > from && last <= to) prefs().edit().putInt(KEY_LAST, last - 1).apply();
-        else if (last < from && last >= to) prefs().edit().putInt(KEY_LAST, last + 1).apply();
+    private void removeStation(Station st) {
+        if (!stations.remove(st)) return; // already gone
+        prefs().edit().remove(authKey(st.url)).apply();
+        unreachable.remove(st.url);
+        saveStations();
+        refreshStationList();
+    }
+
+    /**
+     * Shift a station one place. The "last played" pointer is a URL now, so
+     * reordering no longer has to be kept in step with it by hand.
+     */
+    private void moveStation(Station st, int delta) {
+        int from = stations.indexOf(st);
+        int to = from + delta;
+        if (from < 0 || to < 0 || to >= stations.size()) return;
+        stations.remove(from);
+        stations.add(to, st);
         saveStations();
         refreshStationList();
         stationsListView.setSelection(to);
@@ -2050,7 +2144,9 @@ public class MainActivity extends Activity {
                 finish();
             } else {
                 lastBackPress = now;
-                openStation(prefs().getInt(KEY_LAST, 0));
+                // Back to what is actually playing, which is what this branch
+                // is guarded on — no need to consult the remembered pointer.
+                openStation(indexOfUrl(currentUrl));
             }
         } else {
             if (now - lastBackPress < BACK_WINDOW_MS) {
@@ -2101,7 +2197,7 @@ public class MainActivity extends Activity {
                 .setTitle("Wave TV  ·  " + appVersion())
                 .setItems(items, (d, which) -> {
                     switch (which) {
-                        case 0: showStationDialog(-1); break;
+                        case 0: showStationDialog(null); break;
                         case 1: showSleepDialog(); break;
                         case 2: finish(); break;
                     }
