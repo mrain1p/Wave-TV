@@ -133,6 +133,61 @@ public class MainActivity extends Activity {
     private final Handler ui = new Handler(Looper.getMainLooper());
 
     /**
+     * One pool for every station request.
+     *
+     * Each of the four call sites used to start a raw Thread: one per station
+     * on every probe, and another every seven seconds for now-playing. Against
+     * a station that hangs rather than refuses — which is the normal failure
+     * for a LAN address after the television has moved networks — each of
+     * those lives for the full connect-plus-read timeout, and they were being
+     * created faster than they retired. A small pool bounds that; the work is
+     * all short, blocking I/O, so a handful of threads is plenty and the queue
+     * absorbs the rest.
+     */
+    private final java.util.concurrent.ExecutorService net =
+            java.util.concurrent.Executors.newFixedThreadPool(4, r -> {
+                Thread t = new Thread(r, "wavetv-net");
+                t.setDaemon(true); // never hold the process open on our account
+                return t;
+            });
+
+    /** Run a station request off the UI thread, unless we are on the way out. */
+    private void offThread(Runnable r) {
+        try {
+            net.execute(r);
+        } catch (java.util.concurrent.RejectedExecutionException ignored) {
+            // Shutting down. The result would have nowhere to land anyway.
+        }
+    }
+
+    /** Open a station API call with the timeouts, credential and redirect policy. */
+    private HttpURLConnection open(String base, String path, int timeoutMs)
+            throws java.io.IOException {
+        HttpURLConnection c = (HttpURLConnection) new URL(base + path).openConnection();
+        c.setConnectTimeout(timeoutMs);
+        c.setReadTimeout(timeoutMs);
+        applyAuth(c, base);
+        return c;
+    }
+
+    /**
+     * Finish with a connection. Draining the error body matters as much as
+     * disconnecting does: an undrained 401 or 502 keeps its socket out of the
+     * keep-alive pool, so a station that was failing made every subsequent
+     * poll pay for a fresh connection.
+     */
+    private static void close(HttpURLConnection c) {
+        if (c == null) return;
+        try (InputStream err = c.getErrorStream()) {
+            if (err != null) {
+                byte[] sink = new byte[4096];
+                while (err.read(sink) > 0) { /* drain */ }
+            }
+        } catch (Exception ignored) {}
+        c.disconnect();
+    }
+
+    /**
      * The station picker's colours. Defaults to the app's own dark scheme and
      * shifts to whatever the on-air station is wearing, so the picker feels like
      * part of that station rather than a separate app bolted on top.
@@ -1185,13 +1240,11 @@ public class MainActivity extends Activity {
                 // Ask the page whether audio is actually rolling.
                 syncPlaybackState();
                 final String base = currentUrl.endsWith("/") ? currentUrl : currentUrl + "/";
-                new Thread(() -> {
+                offThread(() -> {
                     String title = null, meta = null, coverId = null;
+                    HttpURLConnection c = null;
                     try {
-                        HttpURLConnection c = (HttpURLConnection) new URL(base + "api/now-playing").openConnection();
-                        c.setConnectTimeout(4000);
-                        c.setReadTimeout(4000);
-                        applyAuth(c, base);
+                        c = open(base, "api/now-playing", 4000);
                         String body;
                         try (InputStream in = c.getInputStream()) {
                             body = readTextCapped(in, MAX_JSON_CHARS);
@@ -1214,7 +1267,8 @@ public class MainActivity extends Activity {
                                     .append(listeners == 1 ? " listener" : " listeners");
                             meta = m.toString();
                         }
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) {
+                    } finally { close(c); }
                     final String fTitle = title, fMeta = meta, fCover = coverId;
                     ui.post(() -> {
                         if (!stationsVisible()) return;
@@ -1235,7 +1289,7 @@ public class MainActivity extends Activity {
                             setCover(null);
                         }
                     });
-                }).start();
+                });
             }
             ui.postDelayed(this, NOW_PLAYING_POLL_MS);
         }
@@ -1268,27 +1322,25 @@ public class MainActivity extends Activity {
         if (subsonicId.equals(shownCoverId)) return;
         shownCoverId = subsonicId;
         final int artPx = dp(62); // the square the card draws it into
-        new Thread(() -> {
+        offThread(() -> {
             android.graphics.Bitmap bmp = null;
+            HttpURLConnection c = null;
             try {
-                HttpURLConnection c = (HttpURLConnection)
-                        new URL(base + "api/cover/" + java.net.URLEncoder.encode(subsonicId, "UTF-8"))
-                                .openConnection();
-                c.setConnectTimeout(5000);
-                c.setReadTimeout(5000);
-                applyAuth(c, base);
+                c = open(base, "api/cover/"
+                        + java.net.URLEncoder.encode(subsonicId, "UTF-8"), 5000);
                 byte[] data;
                 try (InputStream in = c.getInputStream()) {
                     data = readBytesCapped(in, MAX_COVER_BYTES);
                 }
                 if (data != null) bmp = decodeCover(data, artPx);
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            } finally { close(c); }
             final android.graphics.Bitmap out = bmp;
             ui.post(() -> {
                 if (out != null && subsonicId.equals(shownCoverId)) npArt.setImageBitmap(out);
                 else if (out == null && subsonicId.equals(shownCoverId)) npArt.setImageDrawable(null);
             });
-        }).start();
+        });
     }
 
     /* ------------------------------------------------------------------ */
@@ -1521,24 +1573,22 @@ public class MainActivity extends Activity {
         final ArrayList<String> urls = new ArrayList<>();
         for (Station st : stations) urls.add(st.url);
         for (final String url : urls) {
-            new Thread(() -> {
+            offThread(() -> {
                 boolean ok = false;
+                HttpURLConnection c = null;
                 try {
                     String base = url.endsWith("/") ? url : url + "/";
-                    HttpURLConnection c = (HttpURLConnection) new URL(base + "api/health").openConnection();
-                    c.setConnectTimeout(3000);
-                    c.setReadTimeout(3000);
-                    applyAuth(c, base);
+                    c = open(base, "api/health", 3000);
                     int code = c.getResponseCode();
                     ok = code >= 200 && code < 500; // a 401 still means it's there
-                    c.disconnect();
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                } finally { close(c); }
                 final boolean reachable = ok;
                 ui.post(() -> {
                     boolean changed = reachable ? unreachable.remove(url) : unreachable.add(url);
                     if (changed && stationsVisible()) stationsAdapter.notifyDataSetChanged();
                 });
-            }).start();
+            });
         }
     }
 
@@ -1958,14 +2008,11 @@ public class MainActivity extends Activity {
      */
     private void fetchStationName(final String url) {
         final String base = url.endsWith("/") ? url : url + "/";
-        new Thread(() -> {
+        offThread(() -> {
             String found = null;
+            HttpURLConnection c = null;
             try {
-                HttpURLConnection c = (HttpURLConnection)
-                        new URL(base + "api/now-playing").openConnection();
-                c.setConnectTimeout(5000);
-                c.setReadTimeout(5000);
-                applyAuth(c, base);
+                c = open(base, "api/now-playing", 5000);
                 String body;
                 try (InputStream in = c.getInputStream()) {
                     body = readTextCapped(in, MAX_JSON_CHARS);
@@ -1975,7 +2022,8 @@ public class MainActivity extends Activity {
                     String s = dj.optString("station", "");
                     if (!s.isEmpty()) found = s;
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            } finally { close(c); }
             final String name = found;
             if (name == null) return;
             ui.post(() -> {
@@ -1988,7 +2036,7 @@ public class MainActivity extends Activity {
                     }
                 }
             });
-        }).start();
+        });
     }
 
     private ArrayList<Station> loadStations() {
@@ -2545,6 +2593,7 @@ public class MainActivity extends Activity {
         // every ui.post from the network threads all outlive this method, and
         // several of them reach for a WebView that is about to stop existing.
         ui.removeCallbacksAndMessages(null);
+        net.shutdownNow(); // in-flight polls have nothing left to report to
         cancelSleepTimer();
         if (onAirPulse != null) onAirPulse.cancel();
         if (paletteAnim != null) paletteAnim.cancel();

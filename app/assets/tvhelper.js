@@ -384,15 +384,22 @@
      a tap-to-tune gate with a remote. The shell disables the browser's
      user-gesture requirement, so dismissing the gate ourselves starts audio.
      Polls briefly because the gate mounts a moment after the page settles. */
+  var autoTuneTimer = null;
   window.__swtvAutoTuneIn = function () {
+    /* onPageFinished can fire more than once against one document — a
+       fragment navigation is enough — and every call used to leave its own
+       poller running, each clicking the gate for the next 7.5 seconds. */
+    if (autoTuneTimer) clearInterval(autoTuneTimer);
     var tries = 0;
-    var t = setInterval(function () {
+    autoTuneTimer = setInterval(function () {
       var gate = tuneInGate();
       if (gate) {
         gate.click();
-        clearInterval(t);
+        clearInterval(autoTuneTimer);
+        autoTuneTimer = null;
       } else if (++tries > 25) {
-        clearInterval(t);
+        clearInterval(autoTuneTimer);
+        autoTuneTimer = null;
       }
     }, 300);
   };
@@ -430,6 +437,7 @@
   };
 
   /* Open the request drawer (page shortcut 'r') and focus its textarea. */
+  var openRequestTimer = null;
   window.__swtvOpenRequest = function () {
     function focusTa() {
       var dlg = document.querySelector('[role="dialog"]');
@@ -437,11 +445,17 @@
       if (ta) { focusEl(ta); return true; }
       return false;
     }
+    /* Same reason as __swtvAutoTuneIn: pressing the request key twice in
+       quick succession left two pollers both grabbing the textarea. */
+    if (openRequestTimer) clearInterval(openRequestTimer);
     if (focusTa()) return;
     window.__swtvKey('r');
     var tries = 0;
-    var t = setInterval(function () {
-      if (focusTa() || ++tries > 20) clearInterval(t);
+    openRequestTimer = setInterval(function () {
+      if (focusTa() || ++tries > 20) {
+        clearInterval(openRequestTimer);
+        openRequestTimer = null;
+      }
     }, 150);
   };
 
