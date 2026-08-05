@@ -94,7 +94,9 @@ public class MainActivity extends Activity {
     private android.widget.Button addChip;
     private android.widget.Button themeChip;
     private TextView titleView, subView, noteView, emptyView;
-    private View accentRule;
+    private TextView colNum, colName, colStatus;
+    private View accentRule, hairRule, headRule, npRule;
+    private ThemeGlyph themeGlyph;
     private GradientDrawable npBgDrawable, artBgDrawable, playBgDrawable;
     private final ArrayList<android.widget.Button> chips = new ArrayList<>();
     private final java.util.Map<android.widget.Button, GradientDrawable> chipBgs =
@@ -360,10 +362,15 @@ public class MainActivity extends Activity {
         headings.addView(titleView);
 
         subView = new TextView(this);
-        subView.setText("STATIONS  ·  OK tune in  ·  hold OK for options  ·  MENU for settings");
+        subView.setText("OK TUNE IN  ·  HOLD OK FOR OPTIONS  ·  MENU FOR SETTINGS");
         subView.setTextColor(MUTED);
-        subView.setTextSize(13);
-        subView.setPadding(0, dp(4), 0, 0);
+        subView.setTextSize(10);
+        // Was the one line on this screen in the system sans, directly under a
+        // monospace wordmark. A family mismatch between adjacent lines is the
+        // loudest thing a layout can get wrong.
+        subView.setTypeface(Typeface.MONOSPACE);
+        subView.setLetterSpacing(0.16f);
+        subView.setPadding(0, dp(6), 0, 0);
         headings.addView(subView);
 
         header.addView(headings, new LinearLayout.LayoutParams(0,
@@ -373,8 +380,10 @@ public class MainActivity extends Activity {
         header.addView(addChip, headerChipLp());
 
         themeChip = buildChip("", v -> cycleThemeMode());
-        themeChip.setTextSize(17);          // emoji-only, so give the glyph room
-        themeChip.setPadding(dp(15), dp(7), dp(15), dp(8));
+        themeGlyph = new ThemeGlyph(dp(17));
+        themeGlyph.tint(MUTED);
+        themeChip.setCompoundDrawablesWithIntrinsicBounds(themeGlyph, null, null, null);
+        themeChip.setPadding(dp(15), dp(9), dp(15), dp(9));
         header.addView(themeChip, headerChipLp());
 
         sleepChip = buildChip("☾  6h", v -> showSleepDialog());
@@ -388,10 +397,41 @@ public class MainActivity extends Activity {
         updateSleepChip();
         updateThemeChip();
 
+        // Masthead separator as a newspaper double rule — a heavy line, a gap,
+        // then a hairline. One 2dp band of full-saturation accent was heavier
+        // than anything it was separating.
         accentRule = new View(this);
         accentRule.setBackgroundColor(VERMILION);
         stationsPanel.addView(accentRule, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(2)));
+
+        hairRule = new View(this);
+        LinearLayout.LayoutParams hairLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(1));
+        hairLp.topMargin = dp(3);
+        stationsPanel.addView(hairRule, hairLp);
+
+        // Column header: the list reads as a table rather than a stack of
+        // slabs, and the number/status columns get somewhere to belong.
+        LinearLayout colHead = new LinearLayout(this);
+        colHead.setOrientation(LinearLayout.HORIZONTAL);
+        colHead.setPadding(dp(14), dp(12), dp(14), dp(10));
+        colNum = columnLabel("NO.");
+        colName = columnLabel("STATION");
+        colStatus = columnLabel("STATUS");
+        colStatus.setGravity(Gravity.END);
+        colHead.addView(colNum, new LinearLayout.LayoutParams(dp(56),
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        colHead.addView(colName, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        colHead.addView(colStatus, new LinearLayout.LayoutParams(dp(140),
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        stationsPanel.addView(colHead, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        headRule = new View(this);
+        stationsPanel.addView(headRule, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(1)));
 
         stationsListView = new ListView(this);
         stationsListView.setBackgroundColor(BG);
@@ -406,18 +446,42 @@ public class MainActivity extends Activity {
                 // to end up in a screenshot. The address stays reachable via
                 // hold-OK > Edit.
                 LinearLayout row = new LinearLayout(MainActivity.this);
-                row.setOrientation(LinearLayout.VERTICAL);
-                row.setPadding(dp(14), dp(16), dp(14), dp(16));
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(dp(14), dp(15), dp(14), dp(15));
                 Station st = stations.get(position);
                 boolean playing = st.url.equals(currentUrl);
                 boolean offline = unreachable.contains(st.url);
+
+                TextView num = new TextView(MainActivity.this);
+                num.setText(String.format(Locale.US, "%02d", position + 1));
+                num.setTextColor(withAlpha(palette.muted, 190));
+                num.setTextSize(15);
+                num.setTypeface(Typeface.MONOSPACE);
+                row.addView(num, new LinearLayout.LayoutParams(dp(56),
+                        ViewGroup.LayoutParams.WRAP_CONTENT));
+
                 TextView name = new TextView(MainActivity.this);
-                name.setText(String.format(Locale.US, "%02d  %s%s", position + 1, st.name,
-                        playing ? "   · ON AIR" : (offline ? "   · offline" : "")));
-                name.setTextColor(playing ? palette.accentText : (offline ? palette.muted : palette.ink));
+                name.setText(st.name);
+                name.setTextColor(offline ? palette.muted : palette.ink);
                 name.setTextSize(20);
+                name.setSingleLine(true);
+                name.setEllipsize(android.text.TextUtils.TruncateAt.END);
                 name.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
-                row.addView(name);
+                row.addView(name, new LinearLayout.LayoutParams(0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+                // Status as its own column in small letterspaced caps, rather
+                // than appended to the name at the same weight.
+                TextView status = new TextView(MainActivity.this);
+                status.setText(playing ? "ON AIR" : (offline ? "NOT RESPONDING" : ""));
+                status.setTextColor(playing ? palette.accentText : palette.muted);
+                status.setTextSize(10);
+                status.setTypeface(Typeface.MONOSPACE);
+                status.setLetterSpacing(0.22f);
+                status.setGravity(Gravity.END);
+                row.addView(status, new LinearLayout.LayoutParams(dp(140),
+                        ViewGroup.LayoutParams.WRAP_CONTENT));
                 return row;
             }
         };
@@ -439,11 +503,13 @@ public class MainActivity extends Activity {
         // this line whenever it's empty, and focus goes to the Add chip so OK
         // still starts a station in one press.
         emptyView = new TextView(this);
-        emptyView.setText("No stations yet.\n\nPress  +  Add station  to begin.");
-        emptyView.setTextSize(16);
-        emptyView.setLineSpacing(dp(2), 1f);
+        emptyView.setText("NO STATIONS\n\nPress  +  Add station  to begin");
+        emptyView.setTextSize(13);
+        emptyView.setLineSpacing(dp(3), 1f);
         emptyView.setTypeface(Typeface.MONOSPACE);
-        emptyView.setGravity(Gravity.CENTER);
+        emptyView.setLetterSpacing(0.14f);
+        emptyView.setGravity(Gravity.CENTER_HORIZONTAL);
+        emptyView.setPadding(0, dp(52), 0, 0);
         LinearLayout.LayoutParams emptyLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
         emptyLp.topMargin = dp(8);
@@ -551,9 +617,15 @@ public class MainActivity extends Activity {
         npCard.addView(npText, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
+        npRule = new View(this);
+        LinearLayout.LayoutParams npRuleLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(1));
+        npRuleLp.topMargin = dp(10);
+        stationsPanel.addView(npRule, npRuleLp);
+
         LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        cardLp.topMargin = dp(14);
+        cardLp.topMargin = dp(4);
         stationsPanel.addView(npCard, cardLp);
 
         noteView = new TextView(this);
@@ -588,6 +660,116 @@ public class MainActivity extends Activity {
         playButton.setTextColor(focused ? palette.onAccent : palette.ink);
     }
 
+    /** A column heading: small, letterspaced, quiet. */
+    private TextView columnLabel(String text) {
+        TextView t = new TextView(this);
+        t.setText(text);
+        t.setTextColor(MUTED);
+        t.setTextSize(9);
+        t.setTypeface(Typeface.MONOSPACE);
+        t.setLetterSpacing(0.3f);
+        return t;
+    }
+
+    /**
+     * The focused row: a solid accent rule down its leading edge with a tinted
+     * panel beside it, instead of a full-bleed slab of accent.
+     *
+     * Built by stacking rather than insetting from the right, because that
+     * would need the row's width: the accent fills the whole bounds and the
+     * opaque panel is inset from the left, so the accent only shows in the
+     * strip the panel doesn't cover. Per-corner radii keep it square where it
+     * meets the rule and rounded at the open end.
+     */
+    private android.graphics.drawable.Drawable rowSelector() {
+        GradientDrawable edge = new GradientDrawable();
+        edge.setColor(palette.accent);
+
+        GradientDrawable panel = new GradientDrawable();
+        panel.setColor(blend(palette.bg, palette.accent, 0.17f));
+        float r = dp(3);
+        panel.setCornerRadii(new float[]{0, 0, r, r, r, r, 0, 0});
+
+        android.graphics.drawable.LayerDrawable sel =
+                new android.graphics.drawable.LayerDrawable(
+                        new android.graphics.drawable.Drawable[]{edge, panel});
+        sel.setLayerInset(1, dp(3), 0, 0, 0);
+        return sel;
+    }
+
+    /**
+     * The theme toggle's sun / moon / broadcast marks, drawn flat and tinted
+     * from the palette. They were system emoji, which arrive full-colour in
+     * someone else's drawing style and were the only such object on a screen
+     * of monochrome type.
+     */
+    private static class ThemeGlyph extends android.graphics.drawable.Drawable {
+        static final int SUN = 0, MOON = 1, STATION = 2;
+        private final android.graphics.Paint p =
+                new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        private final int size;
+        private int kind;
+
+        ThemeGlyph(int sizePx) {
+            size = sizePx;
+            p.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+        }
+
+        void set(int k) { kind = k; invalidateSelf(); }
+        void tint(int c) { p.setColor(c); invalidateSelf(); }
+
+        @Override public int getIntrinsicWidth() { return size; }
+        @Override public int getIntrinsicHeight() { return size; }
+        @Override public void setAlpha(int a) { p.setAlpha(a); }
+        @Override public void setColorFilter(android.graphics.ColorFilter f) { p.setColorFilter(f); }
+        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+
+        @Override
+        public void draw(android.graphics.Canvas c) {
+            android.graphics.Rect b = getBounds();
+            float cx = b.exactCenterX(), cy = b.exactCenterY();
+            float u = Math.min(b.width(), b.height()) / 2f;
+            if (kind == SUN) {
+                p.setStyle(android.graphics.Paint.Style.FILL);
+                c.drawCircle(cx, cy, u * 0.42f, p);
+                p.setStyle(android.graphics.Paint.Style.STROKE);
+                p.setStrokeWidth(Math.max(1f, u * 0.15f));
+                for (int i = 0; i < 8; i++) {
+                    double a = Math.PI * i / 4.0;
+                    float sx = (float) (cx + Math.cos(a) * u * 0.66f);
+                    float sy = (float) (cy + Math.sin(a) * u * 0.66f);
+                    float ex = (float) (cx + Math.cos(a) * u * 0.95f);
+                    float ey = (float) (cy + Math.sin(a) * u * 0.95f);
+                    c.drawLine(sx, sy, ex, ey, p);
+                }
+            } else if (kind == MOON) {
+                // Crescent as the difference of two discs, so it stays a solid
+                // shape at any tint rather than needing a matching backdrop.
+                android.graphics.Path full = new android.graphics.Path();
+                full.addCircle(cx, cy, u * 0.82f, android.graphics.Path.Direction.CW);
+                android.graphics.Path bite = new android.graphics.Path();
+                bite.addCircle(cx + u * 0.42f, cy - u * 0.24f, u * 0.72f,
+                        android.graphics.Path.Direction.CW);
+                full.op(bite, android.graphics.Path.Op.DIFFERENCE);
+                p.setStyle(android.graphics.Paint.Style.FILL);
+                c.drawPath(full, p);
+            } else {
+                // Broadcast: a mast dot with two waves off it.
+                p.setStyle(android.graphics.Paint.Style.FILL);
+                c.drawCircle(cx, cy, u * 0.2f, p);
+                p.setStyle(android.graphics.Paint.Style.STROKE);
+                p.setStrokeWidth(Math.max(1f, u * 0.15f));
+                for (int i = 1; i <= 2; i++) {
+                    float rr = u * (0.2f + 0.34f * i);
+                    android.graphics.RectF oval =
+                            new android.graphics.RectF(cx - rr, cy - rr, cx + rr, cy + rr);
+                    c.drawArc(oval, -125, 70, false, p);
+                    c.drawArc(oval, 55, 70, false, p);
+                }
+            }
+        }
+    }
+
     /**
      * Paint the picker from the current palette. Called every frame of the
      * cross-fade, so it deliberately leaves the list rows alone — rebuilding
@@ -599,13 +781,24 @@ public class MainActivity extends Activity {
         stationsListView.setBackgroundColor(palette.bg);
 
         titleView.setTextColor(palette.ink);
-        subView.setTextColor(palette.muted);
+        subView.setTextColor(withAlpha(palette.muted, 200));
         accentRule.setBackgroundColor(palette.accent);
         noteView.setTextColor(withAlpha(palette.muted, 150));
         if (emptyView != null) emptyView.setTextColor(palette.muted);
+        if (hairRule != null) hairRule.setBackgroundColor(withAlpha(palette.ink, 45));
+        if (headRule != null) headRule.setBackgroundColor(withAlpha(palette.ink, 45));
+        if (npRule != null) npRule.setBackgroundColor(withAlpha(palette.ink, 45));
+        int colInk = withAlpha(palette.muted, 175);
+        if (colNum != null) colNum.setTextColor(colInk);
+        if (colName != null) colName.setTextColor(colInk);
+        if (colStatus != null) colStatus.setTextColor(colInk);
+        if (themeGlyph != null) themeGlyph.tint(
+                themeChip.hasFocus() ? palette.ink : palette.muted);
 
-        npBgDrawable.setColor(palette.surface);
-        npBgDrawable.setStroke(dp(1), withAlpha(palette.ink, 70));
+        // A footer section under a rule, not a floating bordered box: the
+        // stroke competed with the list's own rules for the same job.
+        npBgDrawable.setColor(Color.TRANSPARENT);
+        npBgDrawable.setStroke(0, Color.TRANSPARENT);
         artBgDrawable.setColor(withAlpha(palette.ink, 26));
         artBgDrawable.setStroke(dp(1), withAlpha(palette.ink, 60));
 
@@ -621,10 +814,9 @@ public class MainActivity extends Activity {
     /** The row-level colours, applied once rather than per animation frame. */
     private void applyPaletteToRows() {
         stationsListView.setDivider(new android.graphics.drawable.ColorDrawable(
-                withAlpha(palette.ink, 28)));
+                withAlpha(palette.ink, 22)));
         stationsListView.setDividerHeight(dp(1));
-        stationsListView.setSelector(new android.graphics.drawable.ColorDrawable(
-                withAlpha(palette.accent, 60)));
+        stationsListView.setSelector(rowSelector());
         stationsAdapter.notifyDataSetChanged();
     }
 
@@ -688,7 +880,11 @@ public class MainActivity extends Activity {
     private void updateThemeChip() {
         if (themeChip == null) return;
         String m = themeMode();
-        themeChip.setText(THEME_DARK.equals(m) ? "🌙" : THEME_LIGHT.equals(m) ? "☀️" : "📡");
+        if (themeGlyph != null) {
+            themeGlyph.set(THEME_DARK.equals(m) ? ThemeGlyph.MOON
+                    : THEME_LIGHT.equals(m) ? ThemeGlyph.SUN : ThemeGlyph.STATION);
+            themeGlyph.tint(themeChip.hasFocus() ? palette.ink : palette.muted);
+        }
         themeChip.setContentDescription(THEME_DARK.equals(m) ? "Dark theme"
                 : THEME_LIGHT.equals(m) ? "Light theme" : "Match the station's theme");
     }
@@ -1816,6 +2012,10 @@ public class MainActivity extends Activity {
         bg.setStroke(dp(focused ? 2 : 1),
                 focused ? palette.accent : withAlpha(palette.ink, 90));
         b.setTextColor(focused ? palette.ink : palette.muted);
+        // The drawn glyph has no text colour to inherit.
+        if (b == themeChip && themeGlyph != null) {
+            themeGlyph.tint(focused ? palette.ink : palette.muted);
+        }
     }
 
     /** Keep the masthead chip in step with the stored setting. */
