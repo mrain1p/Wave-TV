@@ -241,6 +241,16 @@ public class MainActivity extends Activity {
         s.setSaveFormData(false);
 
         helperJs = readAsset("tvhelper.js");
+        if (helperJs == null) {
+            // Without it there is no D-pad navigation, no keyboard gate and
+            // none of the __swtv* hooks the shell calls — a mouse-driven page
+            // on a device with no mouse. It failed silently before, which is
+            // an unhelpful way to present a broken build.
+            Toast.makeText(this,
+                    "Wave TV's remote-control layer is missing from this build — "
+                            + "the D-pad won't work in the player",
+                    Toast.LENGTH_LONG).show();
+        }
         web.addJavascriptInterface(new Bridge(), "WaveTV");
 
         web.setWebViewClient(new WebViewClient() {
@@ -257,10 +267,10 @@ public class MainActivity extends Activity {
                     // inject the remote layer or try to auto-tune into it.
                     return;
                 }
-                if (helperJs != null) web.evaluateJavascript(helperJs, null);
+                if (helperJs != null) js(helperJs);
                 // Picking a station is the "play" gesture — dismiss the player's
                 // tap-to-tune gate rather than making the viewer find it.
-                web.evaluateJavascript("window.__swtvAutoTuneIn && __swtvAutoTuneIn()", null);
+                js("window.__swtvAutoTuneIn && __swtvAutoTuneIn()");
                 // Then pick up the resulting state so the sleep countdown starts
                 // from when sound actually begins.
                 ui.postDelayed(MainActivity.this::syncPlaybackState, 3500);
@@ -275,12 +285,35 @@ public class MainActivity extends Activity {
                 ui.postDelayed(palettePoll, 800);
             }
 
+            /**
+             * A network-level failure of the page itself.
+             *
+             * Everything arriving here is already the player's own failure
+             * rather than a sub-resource's: on API 23+ the framework reaches
+             * this through the WebResourceRequest overload, whose default
+             * implementation forwards only when request.isForMainFrame(), and
+             * below that it is only called for the main frame anyway.
+             *
+             * The old guard compared failingUrl against view.getUrl(), which
+             * during a failed navigation is still the LAST COMMITTED page —
+             * the previous station, or null on the first load of the session.
+             * Whenever it didn't match, the error was dropped: loadFailed
+             * stayed false, and onPageFinished then took the browser's error
+             * page for a healthy player, injected the remote layer into it and
+             * tried to auto-tune it. No dialog, and a station that looked live.
+             */
             @Override
             public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-                if (failingUrl != null && failingUrl.equals(view.getUrl())) {
-                    loadFailed = true;
-                    showLoadError(description);
+                // Still worth one check, but against the station we are trying
+                // to reach rather than against whatever is currently committed:
+                // an error for some other host is not this station failing.
+                if (failingUrl != null && currentUrl != null
+                        && !isStationHost(hostOf(failingUrl))) {
+                    return;
                 }
+                loadFailed = true;
+                showLoadError(description == null
+                        ? "The station could not be reached." : description);
             }
 
             /**
@@ -974,7 +1007,7 @@ public class MainActivity extends Activity {
             if (palette != DEFAULT_PALETTE) animateToPalette(DEFAULT_PALETTE);
             return;
         }
-        String js =
+        String probe =
                 "(function(){try{" +
                 "var cs=getComputedStyle(document.documentElement);" +
                 "var cv=document.createElement('canvas');cv.width=1;cv.height=1;" +
@@ -987,7 +1020,7 @@ public class MainActivity extends Activity {
                 "var k=['--bg','--ink','--muted','--accent','--surface'],o=[];" +
                 "for(var i=0;i<k.length;i++)o.push(r((cs.getPropertyValue(k[i])||'').trim()));" +
                 "return o.join('|');}catch(e){return '';}})()";
-        web.evaluateJavascript(js, r -> {
+        js(probe, r -> {
             Palette p = parsePalette(r);
             if (p != null) animateToPalette(p);
         });
@@ -1291,6 +1324,10 @@ public class MainActivity extends Activity {
      * now-playing and cover-art calls.
      */
     private void promptForCredentials(final android.webkit.HttpAuthHandler handler, final String url) {
+        // The challenge can land after the viewer has already walked away.
+        // Cancel rather than abandon the handler, and never try to raise a
+        // dialog on a window that has gone.
+        if (gone()) { handler.cancel(); return; }
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setBackgroundColor(palette.bg);
@@ -1382,7 +1419,7 @@ public class MainActivity extends Activity {
      */
     private void syncPlaybackState() {
         if (!pageLoaded) return;
-        web.evaluateJavascript("window.__swtvTuned ? __swtvTuned() : false", r -> {
+        js("window.__swtvTuned ? __swtvTuned() : false", r -> {
             boolean playing = r != null && r.contains("true");
             setPlayGlyph(playing);
             setOnAir(playing);
@@ -1456,6 +1493,7 @@ public class MainActivity extends Activity {
         prefs().edit().putInt(KEY_LAST, index).apply();
         stationsPanel.setVisibility(View.GONE);
         ui.removeCallbacks(nowPlayingPoll);
+        boolean wasLoaded = pageLoaded; // captured before the reload clears it
         pageLoaded = false;
         if (!st.url.equals(currentUrl) || loadFailed) {
             // Reload on a different station, and also when what's currently
@@ -1465,9 +1503,14 @@ public class MainActivity extends Activity {
             currentUrl = st.url;
             loadStation(st.url);
         } else {
-            pageLoaded = true; // returning to a healthy station: keep it playing
+            // Returning to a station that is already up: keep it playing. Only
+            // claim it is loaded if it genuinely finished — asserting that for
+            // a page still on its way had BACK and the transport evaluating
+            // hooks against a half-built document that had never run the
+            // helper, so neither did anything and both looked broken.
+            pageLoaded = wasLoaded;
         }
-        web.requestFocus();
+        if (web != null) web.requestFocus();
     }
 
     /** The tuned station's display name, for UI that must not show its address. */
@@ -1485,6 +1528,7 @@ public class MainActivity extends Activity {
      * rather than asking the recovered server.
      */
     private void loadStation(String url) {
+        if (web == null) return;
         pageLoaded = false;
         loadFailed = false;
         shownCoverId = null;
@@ -1492,7 +1536,9 @@ public class MainActivity extends Activity {
         web.loadUrl(url);
         // Back to normal caching once this navigation is under way, so ordinary
         // browsing still benefits from the cache.
-        ui.postDelayed(() -> web.getSettings().setCacheMode(WebSettings.LOAD_DEFAULT), 5000);
+        ui.postDelayed(() -> {
+            if (web != null) web.getSettings().setCacheMode(WebSettings.LOAD_DEFAULT);
+        }, 5000);
     }
 
     /* ------------------------------------------------------------------ */
@@ -1739,7 +1785,7 @@ public class MainActivity extends Activity {
                     currentUrl = url;
                     pageLoaded = false;
                     shownCoverId = null;
-                    web.loadUrl(url);
+                    if (web != null) web.loadUrl(url);
                 }
             }
         }
@@ -1957,7 +2003,7 @@ public class MainActivity extends Activity {
      * otherwise the keyboard appears but keystrokes go nowhere.
      */
     private void openKeyboard() {
-        web.evaluateJavascript("window.__swtvActivateField ? __swtvActivateField() : false", r -> {
+        js("window.__swtvActivateField ? __swtvActivateField() : false", r -> {
             if (r == null || !r.contains("true")) {
                 // Focus moved on before the press landed — clear the stale flag so
                 // the next OK reaches the page instead of being swallowed again.
@@ -1967,7 +2013,7 @@ public class MainActivity extends Activity {
             fieldActivated = true;
             keyboardOpenedAt = System.currentTimeMillis();
             InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
-            if (imm == null) return;
+            if (imm == null || web == null) return;
             web.requestFocus();
             imm.restartInput(web); // re-read the field now that it accepts input
             imm.showSoftInput(web, InputMethodManager.SHOW_IMPLICIT);
@@ -1976,9 +2022,9 @@ public class MainActivity extends Activity {
 
     private void handleBackFromPlayer() {
         if (!pageLoaded) { showStations(); return; }
-        web.evaluateJavascript("window.__swtvBack ? __swtvBack() : false", result -> {
+        js("window.__swtvBack ? __swtvBack() : false", result -> {
             if (result != null && result.contains("true")) return; // a drawer was closed
-            if (web.canGoBack()) {
+            if (web != null && web.canGoBack()) {
                 // The click navigated the WebView to a real new page (an
                 // external link, not an in-app drawer) rather than opening a
                 // dialog — return to the exact previous page instead of
@@ -2118,7 +2164,7 @@ public class MainActivity extends Activity {
     private final Runnable sleepTimer = new Runnable() {
         @Override
         public void run() {
-            web.evaluateJavascript("window.__swtvStop ? __swtvStop() : false", r -> {
+            js("window.__swtvStop ? __swtvStop() : false", r -> {
                 setPlayGlyph(false);
                 setOnAir(false);
                 Toast.makeText(MainActivity.this,
@@ -2162,7 +2208,7 @@ public class MainActivity extends Activity {
 
     private void showLoadError(String description) {
         // A failed page can report several errors in a row; one dialog is enough.
-        if (errorDialog != null && errorDialog.isShowing()) return;
+        if (gone() || (errorDialog != null && errorDialog.isShowing())) return;
         errorDialog = new AlertDialog.Builder(this)
                 .setTitle("Can't reach the station")
                 .setMessage("Couldn't load " + currentStationName() + "\n\n" + description
@@ -2206,8 +2252,7 @@ public class MainActivity extends Activity {
         ArrayList<String> results = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
         if (results == null || results.isEmpty()) return;
         String text = results.get(0);
-        web.evaluateJavascript(
-                "window.__swtvInsertText ? __swtvInsertText(" + jsString(text) + ") !== false : false",
+        js("window.__swtvInsertText ? __swtvInsertText(" + jsString(text) + ") !== false : false",
                 r -> {
                     // Dictation leaves the field unlocked, so OK now sends the
                     // request rather than opening a keyboard over it.
@@ -2256,7 +2301,21 @@ public class MainActivity extends Activity {
     /* ------------------------------------------------------------------ */
 
     private void js(String code) {
-        web.evaluateJavascript(code, null);
+        js(code, null);
+    }
+
+    /**
+     * Evaluate in the player, if there is still a player to evaluate in.
+     *
+     * Every one of these is reached from something asynchronous — a poller, a
+     * page callback, a dictation result, the sleep timer — and onDestroy tears
+     * the WebView down underneath all of them. Funnelling them through one
+     * null-checked door is what makes that safe, rather than hoping each
+     * caller was cancelled in time.
+     */
+    private void js(String code, android.webkit.ValueCallback<String> callback) {
+        if (web == null) return;
+        web.evaluateJavascript(code, callback);
     }
 
     private static String jsString(String raw) {
@@ -2349,6 +2408,16 @@ public class MainActivity extends Activity {
         return getSharedPreferences(PREFS, MODE_PRIVATE);
     }
 
+    /**
+     * Whether this activity's window has gone. Dialogs here are raised from
+     * network and WebView callbacks, which can arrive well after the viewer
+     * pressed Exit; AlertDialog.show() on a finishing activity throws
+     * BadTokenException and takes the app down with it.
+     */
+    private boolean gone() {
+        return isFinishing() || isDestroyed();
+    }
+
     private int dp(int v) {
         return Math.round(v * getResources().getDisplayMetrics().density);
     }
@@ -2374,11 +2443,24 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        ui.removeCallbacks(nowPlayingPoll);
-        ui.removeCallbacks(palettePoll);
+        // Everything posted to `ui` has to go, not just the three named
+        // pollers. loadStation's cache-mode reset (5s out), onPageFinished's
+        // playback sync (3.5s), startVoiceRequest's dictation kick (700ms) and
+        // every ui.post from the network threads all outlive this method, and
+        // several of them reach for a WebView that is about to stop existing.
+        ui.removeCallbacksAndMessages(null);
         cancelSleepTimer();
         if (onAirPulse != null) onAirPulse.cancel();
-        if (web != null) web.destroy();
+        if (paletteAnim != null) paletteAnim.cancel();
+        if (web != null) {
+            // Detach first: destroying a WebView that is still in the view
+            // hierarchy is unsupported and crashes on some WebView builds.
+            if (web.getParent() instanceof ViewGroup) {
+                ((ViewGroup) web.getParent()).removeView(web);
+            }
+            web.destroy();
+            web = null; // js() and the loadStation callbacks read this
+        }
         super.onDestroy();
     }
 }
