@@ -93,7 +93,7 @@ public class MainActivity extends Activity {
     private android.widget.Button sleepChip;
     private android.widget.Button addChip;
     private android.widget.Button themeChip;
-    private TextView titleView, subView, noteView;
+    private TextView titleView, subView, noteView, emptyView;
     private View accentRule;
     private GradientDrawable npBgDrawable, artBgDrawable, playBgDrawable;
     private final ArrayList<android.widget.Button> chips = new ArrayList<>();
@@ -200,9 +200,6 @@ public class MainActivity extends Activity {
 
         stations = loadStations();
         showStations();
-        if (stations.isEmpty()) {
-            showStationDialog(-1); // first run: go straight to "add station"
-        }
     }
 
     /* ------------------------------------------------------------------ */
@@ -436,6 +433,23 @@ public class MainActivity extends Activity {
         lp.topMargin = dp(8);
         stationsPanel.addView(stationsListView, lp);
 
+        // First run lands here rather than on an open dialog with the keyboard
+        // up: nothing has been read yet at that point, and a modal is a poor
+        // first impression of a remote-driven app. The list swaps itself for
+        // this line whenever it's empty, and focus goes to the Add chip so OK
+        // still starts a station in one press.
+        emptyView = new TextView(this);
+        emptyView.setText("No stations yet.\n\nPress  +  Add station  to begin.");
+        emptyView.setTextSize(16);
+        emptyView.setLineSpacing(dp(2), 1f);
+        emptyView.setTypeface(Typeface.MONOSPACE);
+        emptyView.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams emptyLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
+        emptyLp.topMargin = dp(8);
+        stationsPanel.addView(emptyView, emptyLp);
+        stationsListView.setEmptyView(emptyView);
+
         // --- now-playing card -------------------------------------------
         LinearLayout npCard = new LinearLayout(this);
         npCard.setOrientation(LinearLayout.HORIZONTAL);
@@ -588,6 +602,7 @@ public class MainActivity extends Activity {
         subView.setTextColor(palette.muted);
         accentRule.setBackgroundColor(palette.accent);
         noteView.setTextColor(withAlpha(palette.muted, 150));
+        if (emptyView != null) emptyView.setTextColor(palette.muted);
 
         npBgDrawable.setColor(palette.surface);
         npBgDrawable.setStroke(dp(1), withAlpha(palette.ink, 70));
@@ -1109,7 +1124,10 @@ public class MainActivity extends Activity {
     private void showStations() {
         refreshStationList();
         stationsPanel.setVisibility(View.VISIBLE);
-        stationsListView.requestFocus();
+        // An empty ListView takes no focus, which would leave the D-pad with
+        // nowhere to go on first run; hand it to Add station instead.
+        if (stations.isEmpty()) addChip.requestFocus();
+        else stationsListView.requestFocus();
         int last = prefs().getInt(KEY_LAST, 0);
         if (last >= 0 && last < stations.size()) stationsListView.setSelection(last);
         ui.removeCallbacks(nowPlayingPoll);
