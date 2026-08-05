@@ -26,7 +26,6 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -86,8 +85,7 @@ public class MainActivity extends Activity {
     private WebView web;
     private LinearLayout stationsPanel;
     private ListView stationsListView;
-    private ArrayAdapter<String> stationsAdapter;
-    private final ArrayList<String> stationLabels = new ArrayList<>();
+    private StationAdapter stationsAdapter;
     private TextView nowPlayingText;
     private TextView npLabel;
     private TextView npMeta;
@@ -210,6 +208,14 @@ public class MainActivity extends Activity {
             // variants only where accent is rendered as, or sits behind, text.
             this.accentText = ensureContrast(accent, bg, 4.5);
             this.onAccent = ensureContrast(bg, accent, 4.5);
+        }
+
+        /** Straight from components, for the cross-fade — see animateToPalette. */
+        Palette(int bg, int ink, int muted, int accent, int surface,
+                int accentText, int onAccent) {
+            this.bg = bg; this.ink = ink; this.muted = muted;
+            this.accent = accent; this.surface = surface;
+            this.accentText = accentText; this.onAccent = onAccent;
         }
     }
 
@@ -608,53 +614,7 @@ public class MainActivity extends Activity {
         stationsListView.setDivider(new android.graphics.drawable.ColorDrawable(Color.argb(28, 243, 239, 230)));
         stationsListView.setDividerHeight(dp(1));
         stationsListView.setSelector(new android.graphics.drawable.ColorDrawable(Color.argb(60, 197, 48, 42)));
-        stationsAdapter = new ArrayAdapter<String>(this, 0, stationLabels) {
-            @Override
-            public View getView(int position, View convertView, ViewGroup parent) {
-                // Deliberately name-only: a private station's address is a
-                // secret worth keeping, and this screen is the one most likely
-                // to end up in a screenshot. The address stays reachable via
-                // hold-OK > Edit.
-                LinearLayout row = new LinearLayout(MainActivity.this);
-                row.setOrientation(LinearLayout.HORIZONTAL);
-                row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setPadding(dp(14), dp(15), dp(14), dp(15));
-                Station st = stations.get(position);
-                boolean playing = st.url.equals(currentUrl);
-                boolean offline = unreachable.contains(st.url);
-
-                TextView num = new TextView(MainActivity.this);
-                num.setText(String.format(Locale.US, "%02d", position + 1));
-                num.setTextColor(withAlpha(palette.muted, 190));
-                num.setTextSize(15);
-                num.setTypeface(Typeface.MONOSPACE);
-                row.addView(num, new LinearLayout.LayoutParams(dp(56),
-                        ViewGroup.LayoutParams.WRAP_CONTENT));
-
-                TextView name = new TextView(MainActivity.this);
-                name.setText(st.name);
-                name.setTextColor(offline ? palette.muted : palette.ink);
-                name.setTextSize(20);
-                name.setSingleLine(true);
-                name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                name.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
-                row.addView(name, new LinearLayout.LayoutParams(0,
-                        ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-                // Status as its own column in small letterspaced caps, rather
-                // than appended to the name at the same weight.
-                TextView status = new TextView(MainActivity.this);
-                status.setText(playing ? "ON AIR" : (offline ? "NOT RESPONDING" : ""));
-                status.setTextColor(playing ? palette.accentText : palette.muted);
-                status.setTextSize(10);
-                status.setTypeface(Typeface.MONOSPACE);
-                status.setLetterSpacing(0.22f);
-                status.setGravity(Gravity.END);
-                row.addView(status, new LinearLayout.LayoutParams(dp(140),
-                        ViewGroup.LayoutParams.WRAP_CONTENT));
-                return row;
-            }
-        };
+        stationsAdapter = new StationAdapter();
         stationsListView.setAdapter(stationsAdapter);
         stationsListView.setOnItemClickListener((parent, view, pos, id) -> openStation(pos));
         stationsListView.setOnItemLongClickListener((parent, view, pos, id) -> {
@@ -828,6 +788,91 @@ public class MainActivity extends Activity {
         playBgDrawable.setColor(focused ? palette.accent : withAlpha(palette.accent, 80));
         playBgDrawable.setStroke(dp(1), palette.accent);
         playButton.setTextColor(focused ? palette.onAccent : palette.ink);
+    }
+
+    /** The views of one list row, held so a rebind doesn't rebuild them. */
+    private static class Row {
+        final LinearLayout view;
+        final TextView num, name, status;
+        Row(LinearLayout view, TextView num, TextView name, TextView status) {
+            this.view = view;
+            this.num = num;
+            this.name = name;
+            this.status = status;
+        }
+    }
+
+    /** Everything about a row that doesn't change between stations. */
+    private Row buildRow() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(14), dp(15), dp(14), dp(15));
+
+        TextView num = new TextView(this);
+        num.setTextSize(15);
+        num.setTypeface(Typeface.MONOSPACE);
+        row.addView(num, new LinearLayout.LayoutParams(dp(56),
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        TextView name = new TextView(this);
+        name.setTextSize(20);
+        name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        name.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+        row.addView(name, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        // Status as its own column in small letterspaced caps, rather than
+        // appended to the name at the same weight.
+        TextView status = new TextView(this);
+        status.setTextSize(10);
+        status.setTypeface(Typeface.MONOSPACE);
+        status.setLetterSpacing(0.22f);
+        status.setGravity(Gravity.END);
+        row.addView(status, new LinearLayout.LayoutParams(dp(140),
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        Row r = new Row(row, num, name, status);
+        row.setTag(r);
+        return r;
+    }
+
+    /**
+     * The station list, read straight from `stations`.
+     *
+     * It used to be an ArrayAdapter over a parallel list of names, while
+     * getView reached into `stations` for everything except the name — two
+     * lists that had to be kept in step by hand, with an IndexOutOfBounds
+     * waiting on any path that updated one and not the other. One source
+     * removes the question. Rows are recycled rather than rebuilt, so holding
+     * a direction on the D-pad no longer allocates six views per step.
+     */
+    private class StationAdapter extends android.widget.BaseAdapter {
+        @Override public int getCount() { return stations.size(); }
+        @Override public Station getItem(int position) { return stations.get(position); }
+        @Override public long getItemId(int position) { return position; }
+
+        @Override
+        public View getView(int position, View convertView, ViewGroup parent) {
+            Row r = convertView != null ? (Row) convertView.getTag() : buildRow();
+            Station st = stations.get(position);
+            boolean playing = st.url.equals(currentUrl);
+            boolean offline = unreachable.contains(st.url);
+
+            r.num.setText(String.format(Locale.US, "%02d", position + 1));
+            r.num.setTextColor(withAlpha(palette.muted, 190));
+
+            // Deliberately name-only: a private station's address is a secret
+            // worth keeping, and this screen is the one most likely to end up
+            // in a screenshot. The address stays reachable via hold-OK > Edit.
+            r.name.setText(st.name);
+            r.name.setTextColor(offline ? palette.muted : palette.ink);
+
+            r.status.setText(playing ? "ON AIR" : (offline ? "NOT RESPONDING" : ""));
+            r.status.setTextColor(playing ? palette.accentText : palette.muted);
+            return r.view;
+        }
     }
 
     /** A column heading: small, letterspaced, quiet. */
@@ -1013,12 +1058,20 @@ public class MainActivity extends Activity {
         paletteAnim.setDuration(420);
         paletteAnim.addUpdateListener(a -> {
             float t = (float) a.getAnimatedValue();
+            // Interpolate the derived colours too rather than re-deriving them
+            // each frame. The five-argument constructor runs ensureContrast
+            // twice, and each of those can walk twenty blend-and-measure steps
+            // at six pow() calls apiece — a few thousand per 420ms fade, on a
+            // device with none to spare. Both endpoints are legible by
+            // construction and the frames between them last 16ms.
             palette = new Palette(
                     (int) ev.evaluate(t, from.bg, target.bg),
                     (int) ev.evaluate(t, from.ink, target.ink),
                     (int) ev.evaluate(t, from.muted, target.muted),
                     (int) ev.evaluate(t, from.accent, target.accent),
-                    (int) ev.evaluate(t, from.surface, target.surface));
+                    (int) ev.evaluate(t, from.surface, target.surface),
+                    (int) ev.evaluate(t, from.accentText, target.accentText),
+                    (int) ev.evaluate(t, from.onAccent, target.onAccent));
             applyPalette();
         });
         paletteAnim.addListener(new android.animation.AnimatorListenerAdapter() {
@@ -1540,8 +1593,6 @@ public class MainActivity extends Activity {
     /* ------------------------------------------------------------------ */
 
     private void refreshStationList() {
-        stationLabels.clear();
-        for (Station st : stations) stationLabels.add(st.name);
         stationsAdapter.notifyDataSetChanged();
     }
 
@@ -2378,7 +2429,10 @@ public class MainActivity extends Activity {
     private void startVoice() {
         Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
+        // EXTRA_LANGUAGE wants a BCP-47 tag. A Locale is Serializable, so
+        // passing one compiled and looked right, and then getStringExtra on
+        // the far side quietly returned null — the hint has never applied.
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag());
         i.putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak your request to the DJ");
         try {
             startActivityForResult(i, REQ_VOICE);

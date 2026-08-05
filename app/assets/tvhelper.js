@@ -65,7 +65,9 @@
   );
 
   var dialogWasOpen = false;
-  var dialogObserver = new MutationObserver(function () {
+  var dialogCheckQueued = false;
+  function checkDialogState() {
+    dialogCheckQueued = false;
     var open = !!document.querySelector('[role="dialog"]');
     if (dialogWasOpen && !open) {
       var trigger = lastTrigger;
@@ -81,6 +83,18 @@
       }, 80); // after Radix's own close/unmount cycle settles
     }
     dialogWasOpen = open;
+  }
+  var dialogObserver = new MutationObserver(function () {
+    /* The player animates continuously — waveform, scrubber, clock — so this
+       fires constantly, and a document-wide querySelector per batch of
+       records is real work on television silicon. Coalescing to one check per
+       100ms is ample for noticing a dialog go away; the restore below waits
+       80ms after that anyway. setTimeout rather than requestAnimationFrame on
+       purpose: rAF stops while the picker is over the player, which would
+       leave the flag stuck true and the observer dead for good. */
+    if (dialogCheckQueued) return;
+    dialogCheckQueued = true;
+    setTimeout(checkDialogState, 100);
   });
   dialogObserver.observe(document.documentElement, { childList: true, subtree: true });
 
@@ -482,6 +496,10 @@
     else ae.value = next;
     ae.dispatchEvent(new Event('input', { bubbles: true }));
     try { ae.setSelectionRange(next.length, next.length); } catch (e) {}
+    /* Documented as returning true since it was written, and never did. The
+       shell's check is `__swtvInsertText(…) !== false`, so undefined happened
+       to pass — say it properly rather than leave that load-bearing. */
+    return true;
   };
 
   /* ---- initial focus ---------------------------------------------------- */
