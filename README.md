@@ -185,7 +185,13 @@ from this repository, as are the keystore and the built APK.
 | Path | Contents |
 |---|---|
 | `app/AndroidManifest.xml` | Leanback manifest, `INTERNET` only, cleartext permitted for LAN stations |
-| `app/java/com/wave/tv/MainActivity.java` | The application: picker, WebView shell, key handling, now-playing polling, speech-to-text |
+| `app/java/com/wave/tv/MainActivity.java` | The screen: picker, WebView shell, key handling, now-playing polling, speech-to-text |
+| `app/java/com/wave/tv/StationStore.java` | What survives the process — the station list, the last-played pointer, saved passwords, address validation |
+| `app/java/com/wave/tv/Http.java` | Calls to a station's public API: timeouts, credentials, bounded reads, cover decoding |
+| `app/java/com/wave/tv/Palette.java` | The picker's colour scheme, and reading a station's own theme tokens |
+| `app/java/com/wave/tv/Colors.java` | Wave TV's ink, and the contrast arithmetic that keeps a station's theme readable |
+| `app/java/com/wave/tv/ThemeGlyph.java` | The sun / moon / broadcast marks on the theme toggle |
+| `app/java/com/wave/tv/Station.java` | One entry in the picker: a name and an address |
 | `app/assets/tvhelper.js` | Injected into the page — spatial navigation and the JavaScript ↔ native bridge |
 | `app/res/` | Launcher icon, television banner, theme |
 

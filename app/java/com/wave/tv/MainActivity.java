@@ -33,7 +33,6 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -56,10 +55,6 @@ import java.util.Locale;
 public class MainActivity extends Activity {
 
     private static final String PREFS = "wavetv";
-    private static final String KEY_STATIONS = "stations";
-    /** Superseded by KEY_LAST_URL; still read once to migrate an old install. */
-    private static final String KEY_LAST_INDEX = "lastStation";
-    private static final String KEY_LAST_URL = "lastStationUrl";
     private static final String KEY_SLEEP_HOURS = "sleepHours";
     private static final String KEY_THEME_MODE = "themeMode";
     private static final int SLEEP_HOURS_DEFAULT = 6;
@@ -76,10 +71,6 @@ public class MainActivity extends Activity {
     private static final int TARGET_CSS_HEIGHT = 768;
     private static final long NOW_PLAYING_POLL_MS = 7000;
 
-    private static final int INK = Color.rgb(243, 239, 230);
-    private static final int MUTED = Color.rgb(150, 145, 135);
-    private static final int BG = Color.rgb(16, 14, 12);
-    private static final int VERMILION = Color.rgb(197, 48, 42);
 
     private FrameLayout root;
     private WebView web;
@@ -158,110 +149,22 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** Open a station API call with the timeouts, credential and redirect policy. */
-    private HttpURLConnection open(String base, String path, int timeoutMs)
-            throws java.io.IOException {
-        HttpURLConnection c = (HttpURLConnection) new URL(base + path).openConnection();
-        c.setConnectTimeout(timeoutMs);
-        c.setReadTimeout(timeoutMs);
-        applyAuth(c, base);
-        return c;
-    }
 
-    /**
-     * Finish with a connection. Draining the error body matters as much as
-     * disconnecting does: an undrained 401 or 502 keeps its socket out of the
-     * keep-alive pool, so a station that was failing made every subsequent
-     * poll pay for a fresh connection.
-     */
-    private static void close(HttpURLConnection c) {
-        if (c == null) return;
-        try (InputStream err = c.getErrorStream()) {
-            if (err != null) {
-                byte[] sink = new byte[4096];
-                while (err.read(sink) > 0) { /* drain */ }
-            }
-        } catch (Exception ignored) {}
-        c.disconnect();
-    }
 
-    /**
-     * The station picker's colours. Defaults to the app's own dark scheme and
-     * shifts to whatever the on-air station is wearing, so the picker feels like
-     * part of that station rather than a separate app bolted on top.
-     */
-    private static class Palette {
-        final int bg, ink, muted, accent, surface;
-        /** Accent, nudged for legibility as flat text over `bg` — see below. */
-        final int accentText;
-        /** A readable glyph color for text/icons sitting on a SOLID accent fill. */
-        final int onAccent;
-        Palette(int bg, int ink, int muted, int accent, int surface) {
-            this.bg = bg; this.ink = ink; this.muted = muted;
-            this.accent = accent; this.surface = surface;
-            // A station's accent is a saturated brand color tuned to sit over
-            // art, gradients, blur — nothing guarantees it reads as plain text
-            // on our flat background (this is what made the on-air station's
-            // name and the "NOW PLAYING" caption disappear under some station
-            // themes). Keep raw `accent` for fills/dividers/borders, where it
-            // carries its own visual weight, and use these guaranteed-legible
-            // variants only where accent is rendered as, or sits behind, text.
-            this.accentText = ensureContrast(accent, bg, 4.5);
-            this.onAccent = ensureContrast(bg, accent, 4.5);
-        }
-
-        /** Straight from components, for the cross-fade — see animateToPalette. */
-        Palette(int bg, int ink, int muted, int accent, int surface,
-                int accentText, int onAccent) {
-            this.bg = bg; this.ink = ink; this.muted = muted;
-            this.accent = accent; this.surface = surface;
-            this.accentText = accentText; this.onAccent = onAccent;
-        }
-    }
-
-    private static final Palette DEFAULT_PALETTE =
-            new Palette(BG, INK, MUTED, VERMILION, Color.rgb(24, 21, 19));
-    /** Paper-white counterpart, in the same family as Subwave's own light themes. */
-    private static final Palette LIGHT_PALETTE = new Palette(
-            Color.rgb(243, 239, 230), Color.rgb(26, 22, 19), Color.rgb(122, 114, 104),
-            VERMILION, Color.rgb(251, 249, 244));
+    private ArrayList<Station> stations = new ArrayList<>();
 
     private static final String THEME_DARK = "dark";
     private static final String THEME_LIGHT = "light";
     private static final String THEME_STATION = "station";
-    private Palette palette = DEFAULT_PALETTE;
+    private Palette palette = Palette.DARK;
     private android.animation.ValueAnimator paletteAnim;
 
-    private static int withAlpha(int color, int alpha) {
-        return Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color));
-    }
+    /** Everything that survives the process: the list, the pointer, the passwords. */
+    private StationStore store;
 
-    private static class Station {
-        String name;
-        String url;
-        Station(String name, String url) { this.name = name; this.url = url; }
-    }
-
-    private ArrayList<Station> stations = new ArrayList<>();
-
-    /**
-     * The station to come back to, held as a URL rather than a list position.
-     *
-     * As an index it went stale the moment the list changed: removing a
-     * station left the pointer aimed at whichever one slid into that slot, so
-     * BACK from the picker tuned the wrong station, and moveStation needed
-     * three lines of index arithmetic to keep it honest. A URL needs none of
-     * that, and simply resolves to nothing once its station is gone.
-     */
+    /** The station to come back to; see StationStore for why it is a URL. */
     private String lastStationUrl() {
-        String url = prefs().getString(KEY_LAST_URL, null);
-        if (url != null) return url;
-        int i = prefs().getInt(KEY_LAST_INDEX, -1); // migrate an older install
-        return i >= 0 && i < stations.size() ? stations.get(i).url : null;
-    }
-
-    private void rememberLastStation(String url) {
-        prefs().edit().putString(KEY_LAST_URL, url).remove(KEY_LAST_INDEX).apply();
+        return store.lastUrl(stations);
     }
 
     /** Where a station URL currently sits in the list, or -1 if it doesn't. */
@@ -289,14 +192,15 @@ public class MainActivity extends Activity {
                         | android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
 
         root = new FrameLayout(this);
-        root.setBackgroundColor(BG);
+        root.setBackgroundColor(Colors.BG);
 
         buildWebView();
         buildStationsPanel();
 
         setContentView(root);
 
-        stations = loadStations();
+        store = new StationStore(prefs());
+        stations = store.load();
         showStations();
     }
 
@@ -318,7 +222,7 @@ public class MainActivity extends Activity {
         Context webCtx = createConfigurationContext(cfg);
 
         web = new WebView(webCtx);
-        web.setBackgroundColor(BG);
+        web.setBackgroundColor(Colors.BG);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
@@ -416,7 +320,7 @@ public class MainActivity extends Activity {
                 // to reach rather than against whatever is currently committed:
                 // an error for some other host is not this station failing.
                 if (failingUrl != null && currentUrl != null
-                        && !isStationHost(hostOf(failingUrl))) {
+                        && !isStationHost(StationStore.hostOf(failingUrl))) {
                     return;
                 }
                 loadFailed = true;
@@ -484,7 +388,7 @@ public class MainActivity extends Activity {
                 }
                 // Reuse a stored credential silently; otherwise ask. useHttpAuthUsernamePassword
                 // is false on a retry, which means the stored one was rejected.
-                String saved = currentUrl == null ? null : savedAuth(currentUrl);
+                String saved = currentUrl == null ? null : store.savedAuth(currentUrl);
                 if (saved != null && handler.useHttpAuthUsernamePassword()) {
                     try {
                         String[] parts = new String(android.util.Base64.decode(saved,
@@ -492,7 +396,7 @@ public class MainActivity extends Activity {
                         if (parts.length == 2) { handler.proceed(parts[0], parts[1]); return; }
                     } catch (Exception ignored) {}
                 }
-                if (saved != null) prefs().edit().remove(authKey(currentUrl)).apply();
+                if (saved != null) store.forgetAuth(currentUrl);
                 promptForCredentials(handler, currentUrl);
             }
         });
@@ -519,7 +423,7 @@ public class MainActivity extends Activity {
     private void buildStationsPanel() {
         stationsPanel = new LinearLayout(this);
         stationsPanel.setOrientation(LinearLayout.VERTICAL);
-        stationsPanel.setBackgroundColor(BG);
+        stationsPanel.setBackgroundColor(Colors.BG);
         stationsPanel.setPadding(dp(64), dp(32), dp(64), dp(20));
 
         // Masthead: wordmark and hints on the left, sleep-timer chip on the right.
@@ -532,14 +436,14 @@ public class MainActivity extends Activity {
 
         titleView = new TextView(this);
         titleView.setText("WAVE TV");
-        titleView.setTextColor(INK);
+        titleView.setTextColor(Colors.INK);
         titleView.setTextSize(30);
         titleView.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
         headings.addView(titleView);
 
         subView = new TextView(this);
         subView.setText("OK TUNE IN  ·  HOLD OK FOR OPTIONS  ·  MENU FOR SETTINGS");
-        subView.setTextColor(MUTED);
+        subView.setTextColor(Colors.MUTED);
         subView.setTextSize(10);
         // Was the one line on this screen in the system sans, directly under a
         // monospace wordmark. A family mismatch between adjacent lines is the
@@ -557,7 +461,7 @@ public class MainActivity extends Activity {
 
         themeChip = buildChip("", v -> cycleThemeMode());
         themeGlyph = new ThemeGlyph(dp(17));
-        themeGlyph.tint(MUTED);
+        themeGlyph.tint(Colors.MUTED);
         themeChip.setCompoundDrawablesWithIntrinsicBounds(themeGlyph, null, null, null);
         themeChip.setPadding(dp(15), dp(9), dp(15), dp(9));
         header.addView(themeChip, headerChipLp());
@@ -577,7 +481,7 @@ public class MainActivity extends Activity {
         // then a hairline. One 2dp band of full-saturation accent was heavier
         // than anything it was separating.
         accentRule = new View(this);
-        accentRule.setBackgroundColor(VERMILION);
+        accentRule.setBackgroundColor(Colors.VERMILION);
         stationsPanel.addView(accentRule, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(2)));
 
@@ -610,7 +514,7 @@ public class MainActivity extends Activity {
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(1)));
 
         stationsListView = new ListView(this);
-        stationsListView.setBackgroundColor(BG);
+        stationsListView.setBackgroundColor(Colors.BG);
         stationsListView.setDivider(new android.graphics.drawable.ColorDrawable(Color.argb(28, 243, 239, 230)));
         stationsListView.setDividerHeight(dp(1));
         stationsListView.setSelector(new android.graphics.drawable.ColorDrawable(Color.argb(60, 197, 48, 42)));
@@ -674,7 +578,7 @@ public class MainActivity extends Activity {
         playButton.setText("▶");
         playButton.setTextSize(20);
         playButton.setAllCaps(false);
-        playButton.setTextColor(INK);
+        playButton.setTextColor(Colors.INK);
         playButton.setMinWidth(0);
         playButton.setMinimumWidth(0);
         playButton.setMinHeight(0);
@@ -683,7 +587,7 @@ public class MainActivity extends Activity {
         playBgDrawable = new GradientDrawable();
         playBgDrawable.setColor(Color.argb(80, 197, 48, 42));
         playBgDrawable.setCornerRadius(dp(28));
-        playBgDrawable.setStroke(dp(1), VERMILION);
+        playBgDrawable.setStroke(dp(1), Colors.VERMILION);
         playButton.setBackground(playBgDrawable);
         playButton.setOnFocusChangeListener((v, has) -> stylePlayButton(has));
         playButton.setOnClickListener(v -> togglePlayFromList());
@@ -703,7 +607,7 @@ public class MainActivity extends Activity {
         onAirDot = new View(this);
         GradientDrawable dot = new GradientDrawable();
         dot.setShape(GradientDrawable.OVAL);
-        dot.setColor(VERMILION);
+        dot.setColor(Colors.VERMILION);
         onAirDot.setBackground(dot);
         onAirDot.setVisibility(View.INVISIBLE);
         LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(dp(7), dp(7));
@@ -717,7 +621,7 @@ public class MainActivity extends Activity {
 
         npLabel = new TextView(this);
         npLabel.setText("NOW PLAYING");
-        npLabel.setTextColor(VERMILION);
+        npLabel.setTextColor(Colors.VERMILION);
         npLabel.setTextSize(9);
         npLabel.setTypeface(Typeface.MONOSPACE);
         npLabel.setLetterSpacing(0.3f);
@@ -726,7 +630,7 @@ public class MainActivity extends Activity {
 
         nowPlayingText = new TextView(this);
         nowPlayingText.setText("nothing tuned yet");
-        nowPlayingText.setTextColor(INK);
+        nowPlayingText.setTextColor(Colors.INK);
         nowPlayingText.setTextSize(18);
         nowPlayingText.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
         nowPlayingText.setSingleLine(true);
@@ -736,7 +640,7 @@ public class MainActivity extends Activity {
 
         npMeta = new TextView(this);
         npMeta.setText("pick a station above to tune in");
-        npMeta.setTextColor(MUTED);
+        npMeta.setTextColor(Colors.MUTED);
         npMeta.setTextSize(12);
         npMeta.setTypeface(Typeface.MONOSPACE);
         npMeta.setSingleLine(true);
@@ -774,7 +678,7 @@ public class MainActivity extends Activity {
         // Paint once up front from the saved mode. Without this a remembered
         // Dark choice would only ever match because the views happen to be
         // constructed in those colours — an accident, not a guarantee.
-        if (THEME_LIGHT.equals(themeMode())) palette = LIGHT_PALETTE;
+        if (THEME_LIGHT.equals(themeMode())) palette = Palette.LIGHT;
         applyPalette();
         applyPaletteToRows();
     }
@@ -785,7 +689,7 @@ public class MainActivity extends Activity {
 
     private void stylePlayButton(boolean focused) {
         if (playBgDrawable == null) return;
-        playBgDrawable.setColor(focused ? palette.accent : withAlpha(palette.accent, 80));
+        playBgDrawable.setColor(focused ? palette.accent : Colors.withAlpha(palette.accent, 80));
         playBgDrawable.setStroke(dp(1), palette.accent);
         playButton.setTextColor(focused ? palette.onAccent : palette.ink);
     }
@@ -861,7 +765,7 @@ public class MainActivity extends Activity {
             boolean offline = unreachable.contains(st.url);
 
             r.num.setText(String.format(Locale.US, "%02d", position + 1));
-            r.num.setTextColor(withAlpha(palette.muted, 190));
+            r.num.setTextColor(Colors.withAlpha(palette.muted, 190));
 
             // Deliberately name-only: a private station's address is a secret
             // worth keeping, and this screen is the one most likely to end up
@@ -879,7 +783,7 @@ public class MainActivity extends Activity {
     private TextView columnLabel(String text) {
         TextView t = new TextView(this);
         t.setText(text);
-        t.setTextColor(MUTED);
+        t.setTextColor(Colors.MUTED);
         t.setTextSize(9);
         t.setTypeface(Typeface.MONOSPACE);
         t.setLetterSpacing(0.3f);
@@ -901,7 +805,7 @@ public class MainActivity extends Activity {
         edge.setColor(palette.accent);
 
         GradientDrawable panel = new GradientDrawable();
-        panel.setColor(blend(palette.bg, palette.accent, 0.17f));
+        panel.setColor(Colors.blend(palette.bg, palette.accent, 0.17f));
         float r = dp(3);
         panel.setCornerRadii(new float[]{0, 0, r, r, r, r, 0, 0});
 
@@ -912,78 +816,6 @@ public class MainActivity extends Activity {
         return sel;
     }
 
-    /**
-     * The theme toggle's sun / moon / broadcast marks, drawn flat and tinted
-     * from the palette. They were system emoji, which arrive full-colour in
-     * someone else's drawing style and were the only such object on a screen
-     * of monochrome type.
-     */
-    private static class ThemeGlyph extends android.graphics.drawable.Drawable {
-        static final int SUN = 0, MOON = 1, STATION = 2;
-        private final android.graphics.Paint p =
-                new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
-        private final int size;
-        private int kind;
-
-        ThemeGlyph(int sizePx) {
-            size = sizePx;
-            p.setStrokeCap(android.graphics.Paint.Cap.ROUND);
-        }
-
-        void set(int k) { kind = k; invalidateSelf(); }
-        void tint(int c) { p.setColor(c); invalidateSelf(); }
-
-        @Override public int getIntrinsicWidth() { return size; }
-        @Override public int getIntrinsicHeight() { return size; }
-        @Override public void setAlpha(int a) { p.setAlpha(a); }
-        @Override public void setColorFilter(android.graphics.ColorFilter f) { p.setColorFilter(f); }
-        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
-
-        @Override
-        public void draw(android.graphics.Canvas c) {
-            android.graphics.Rect b = getBounds();
-            float cx = b.exactCenterX(), cy = b.exactCenterY();
-            float u = Math.min(b.width(), b.height()) / 2f;
-            if (kind == SUN) {
-                p.setStyle(android.graphics.Paint.Style.FILL);
-                c.drawCircle(cx, cy, u * 0.42f, p);
-                p.setStyle(android.graphics.Paint.Style.STROKE);
-                p.setStrokeWidth(Math.max(1f, u * 0.15f));
-                for (int i = 0; i < 8; i++) {
-                    double a = Math.PI * i / 4.0;
-                    float sx = (float) (cx + Math.cos(a) * u * 0.66f);
-                    float sy = (float) (cy + Math.sin(a) * u * 0.66f);
-                    float ex = (float) (cx + Math.cos(a) * u * 0.95f);
-                    float ey = (float) (cy + Math.sin(a) * u * 0.95f);
-                    c.drawLine(sx, sy, ex, ey, p);
-                }
-            } else if (kind == MOON) {
-                // Crescent as the difference of two discs, so it stays a solid
-                // shape at any tint rather than needing a matching backdrop.
-                android.graphics.Path full = new android.graphics.Path();
-                full.addCircle(cx, cy, u * 0.82f, android.graphics.Path.Direction.CW);
-                android.graphics.Path bite = new android.graphics.Path();
-                bite.addCircle(cx + u * 0.42f, cy - u * 0.24f, u * 0.72f,
-                        android.graphics.Path.Direction.CW);
-                full.op(bite, android.graphics.Path.Op.DIFFERENCE);
-                p.setStyle(android.graphics.Paint.Style.FILL);
-                c.drawPath(full, p);
-            } else {
-                // Broadcast: a mast dot with two waves off it.
-                p.setStyle(android.graphics.Paint.Style.FILL);
-                c.drawCircle(cx, cy, u * 0.2f, p);
-                p.setStyle(android.graphics.Paint.Style.STROKE);
-                p.setStrokeWidth(Math.max(1f, u * 0.15f));
-                for (int i = 1; i <= 2; i++) {
-                    float rr = u * (0.2f + 0.34f * i);
-                    android.graphics.RectF oval =
-                            new android.graphics.RectF(cx - rr, cy - rr, cx + rr, cy + rr);
-                    c.drawArc(oval, -125, 70, false, p);
-                    c.drawArc(oval, 55, 70, false, p);
-                }
-            }
-        }
-    }
 
     /**
      * Paint the picker from the current palette. Called every frame of the
@@ -996,14 +828,14 @@ public class MainActivity extends Activity {
         stationsListView.setBackgroundColor(palette.bg);
 
         titleView.setTextColor(palette.ink);
-        subView.setTextColor(withAlpha(palette.muted, 200));
+        subView.setTextColor(Colors.withAlpha(palette.muted, 200));
         accentRule.setBackgroundColor(palette.accent);
-        noteView.setTextColor(withAlpha(palette.muted, 150));
+        noteView.setTextColor(Colors.withAlpha(palette.muted, 150));
         if (emptyView != null) emptyView.setTextColor(palette.muted);
-        if (hairRule != null) hairRule.setBackgroundColor(withAlpha(palette.ink, 45));
-        if (headRule != null) headRule.setBackgroundColor(withAlpha(palette.ink, 45));
-        if (npRule != null) npRule.setBackgroundColor(withAlpha(palette.ink, 45));
-        int colInk = withAlpha(palette.muted, 175);
+        if (hairRule != null) hairRule.setBackgroundColor(Colors.withAlpha(palette.ink, 45));
+        if (headRule != null) headRule.setBackgroundColor(Colors.withAlpha(palette.ink, 45));
+        if (npRule != null) npRule.setBackgroundColor(Colors.withAlpha(palette.ink, 45));
+        int colInk = Colors.withAlpha(palette.muted, 175);
         if (colNum != null) colNum.setTextColor(colInk);
         if (colName != null) colName.setTextColor(colInk);
         if (colStatus != null) colStatus.setTextColor(colInk);
@@ -1014,8 +846,8 @@ public class MainActivity extends Activity {
         // stroke competed with the list's own rules for the same job.
         npBgDrawable.setColor(Color.TRANSPARENT);
         npBgDrawable.setStroke(0, Color.TRANSPARENT);
-        artBgDrawable.setColor(withAlpha(palette.ink, 26));
-        artBgDrawable.setStroke(dp(1), withAlpha(palette.ink, 60));
+        artBgDrawable.setColor(Colors.withAlpha(palette.ink, 26));
+        artBgDrawable.setStroke(dp(1), Colors.withAlpha(palette.ink, 60));
 
         npLabel.setTextColor(palette.accentText);
         nowPlayingText.setTextColor(currentUrl == null ? palette.muted : palette.ink);
@@ -1029,7 +861,7 @@ public class MainActivity extends Activity {
     /** The row-level colours, applied once rather than per animation frame. */
     private void applyPaletteToRows() {
         stationsListView.setDivider(new android.graphics.drawable.ColorDrawable(
-                withAlpha(palette.ink, 22)));
+                Colors.withAlpha(palette.ink, 22)));
         stationsListView.setDividerHeight(dp(1));
         stationsListView.setSelector(rowSelector());
         stationsAdapter.notifyDataSetChanged();
@@ -1038,10 +870,7 @@ public class MainActivity extends Activity {
     /** Cross-fade to a new palette so the picker doesn't snap between schemes. */
     private void animateToPalette(final Palette target) {
         final Palette from = palette;
-        if (from.bg == target.bg && from.ink == target.ink && from.muted == target.muted
-                && from.accent == target.accent && from.surface == target.surface) {
-            return; // already wearing it
-        }
+        if (from.matches(target)) return; // already wearing it
         if (!stationsVisible()) {
             // Nothing on screen to animate — this is the background poll
             // catching up. Jump straight there instead of ticking an invisible
@@ -1115,8 +944,8 @@ public class MainActivity extends Activity {
     /** Repaint for whichever scheme is selected. */
     private void refreshPalette() {
         String m = themeMode();
-        if (THEME_DARK.equals(m)) { animateToPalette(DEFAULT_PALETTE); return; }
-        if (THEME_LIGHT.equals(m)) { animateToPalette(LIGHT_PALETTE); return; }
+        if (THEME_DARK.equals(m)) { animateToPalette(Palette.DARK); return; }
+        if (THEME_LIGHT.equals(m)) { animateToPalette(Palette.LIGHT); return; }
         fetchStationPalette();
     }
 
@@ -1159,7 +988,7 @@ public class MainActivity extends Activity {
      */
     private void fetchStationPalette() {
         if (!pageLoaded || currentUrl == null) {
-            if (palette != DEFAULT_PALETTE) animateToPalette(DEFAULT_PALETTE);
+            if (palette != Palette.DARK) animateToPalette(Palette.DARK);
             return;
         }
         String probe =
@@ -1176,102 +1005,11 @@ public class MainActivity extends Activity {
                 "for(var i=0;i<k.length;i++)o.push(r((cs.getPropertyValue(k[i])||'').trim()));" +
                 "return o.join('|');}catch(e){return '';}})()";
         js(probe, r -> {
-            Palette p = parsePalette(r);
+            Palette p = Palette.fromTokens(r);
             if (p != null) animateToPalette(p);
         });
     }
 
-    /** "\"rgb(1, 2, 3)|rgb(…)|…\"" from evaluateJavascript → a Palette. */
-    private Palette parsePalette(String raw) {
-        if (raw == null) return null;
-        String s = raw.trim();
-        if (s.startsWith("\"")) s = s.substring(1);
-        if (s.endsWith("\"")) s = s.substring(0, s.length() - 1);
-        s = s.replace("\\\"", "\"");
-        if (s.isEmpty()) return null;
-        String[] parts = s.split("\\|");
-        if (parts.length < 5) return null;
-        int[] c = new int[5];
-        int[] fallback = {DEFAULT_PALETTE.bg, DEFAULT_PALETTE.ink, DEFAULT_PALETTE.muted,
-                DEFAULT_PALETTE.accent, DEFAULT_PALETTE.surface};
-        for (int i = 0; i < 5; i++) {
-            Integer v = parseCssRgb(parts[i]);
-            if (v == null) return null; // a partial palette would look broken
-            c[i] = v;
-        }
-        // The surface token is often near-identical to the background; nudge it
-        // toward the ink so cards stay visible against the page.
-        if (Math.abs(Color.red(c[4]) - Color.red(c[0])) < 6
-                && Math.abs(Color.green(c[4]) - Color.green(c[0])) < 6
-                && Math.abs(Color.blue(c[4]) - Color.blue(c[0])) < 6) {
-            c[4] = blend(c[0], c[1], 0.07f);
-        }
-        // Some station themes pick an --ink/--muted that reads fine on their own
-        // page (against art, gradients, etc.) but is too close in luminance to
-        // their flat --bg to read as plain text here. Push those toward
-        // whichever extreme (white/black) contrasts with the background.
-        c[1] = ensureContrast(c[1], c[0], 4.5);
-        c[2] = ensureContrast(c[2], c[0], 3.0);
-        return new Palette(c[0], c[1], c[2], c[3], c[4]);
-    }
-
-    private static double relativeLuminance(int c) {
-        return channelLum(Color.red(c)) * 0.2126
-                + channelLum(Color.green(c)) * 0.7152
-                + channelLum(Color.blue(c)) * 0.0722;
-    }
-
-    private static double channelLum(int v) {
-        double c = v / 255.0;
-        return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-    }
-
-    private static double contrastRatio(int a, int b) {
-        double la = relativeLuminance(a) + 0.05;
-        double lb = relativeLuminance(b) + 0.05;
-        return la > lb ? la / lb : lb / la;
-    }
-
-    /** Nudges fg toward white/black (whichever side bg sits farther from) until it's legible. */
-    private static int ensureContrast(int fg, int bg, double minRatio) {
-        if (contrastRatio(fg, bg) >= minRatio) return fg;
-        int extreme = relativeLuminance(bg) < 0.5 ? Color.WHITE : Color.BLACK;
-        int result = fg;
-        for (int step = 1; step <= 20; step++) {
-            result = blend(fg, extreme, step / 20f);
-            if (contrastRatio(result, bg) >= minRatio) break;
-        }
-        return result;
-    }
-
-    private static int blend(int a, int b, float ratio) {
-        return Color.rgb(
-                Math.round(Color.red(a) * (1 - ratio) + Color.red(b) * ratio),
-                Math.round(Color.green(a) * (1 - ratio) + Color.green(b) * ratio),
-                Math.round(Color.blue(a) * (1 - ratio) + Color.blue(b) * ratio));
-    }
-
-    /** Parses the rgb()/rgba() form a browser always normalises colours into. */
-    private static Integer parseCssRgb(String v) {
-        if (v == null) return null;
-        int open = v.indexOf('(');
-        int close = v.lastIndexOf(')');
-        if (open < 0 || close <= open) return null;
-        String[] nums = v.substring(open + 1, close).split("[,/\\s]+");
-        if (nums.length < 3) return null;
-        try {
-            int r = Math.round(Float.parseFloat(nums[0].trim()));
-            int g = Math.round(Float.parseFloat(nums[1].trim()));
-            int b = Math.round(Float.parseFloat(nums[2].trim()));
-            return Color.rgb(clamp(r), clamp(g), clamp(b));
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private static int clamp(int v) {
-        return v < 0 ? 0 : (v > 255 ? 255 : v);
-    }
 
     /* ------------------------------------------------------------------ */
     /* Now-playing poller (station list footer)                            */
@@ -1297,10 +1035,10 @@ public class MainActivity extends Activity {
                     String title = null, meta = null, coverId = null;
                     HttpURLConnection c = null;
                     try {
-                        c = open(base, "api/now-playing", 4000);
+                        c = Http.open(base, "api/now-playing", 4000, store.savedAuth(base));
                         String body;
                         try (InputStream in = c.getInputStream()) {
-                            body = readTextCapped(in, MAX_JSON_CHARS);
+                            body = Http.readTextCapped(in, Http.MAX_JSON_CHARS);
                         }
                         JSONObject o = new JSONObject(body);
                         JSONObject np = o.optJSONObject("nowPlaying");
@@ -1321,7 +1059,7 @@ public class MainActivity extends Activity {
                             meta = m.toString();
                         }
                     } catch (Exception ignored) {
-                    } finally { close(c); }
+                    } finally { Http.close(c); }
                     final String fTitle = title, fMeta = meta, fCover = coverId;
                     ui.post(() -> {
                         if (!stationsVisible()) return;
@@ -1379,15 +1117,16 @@ public class MainActivity extends Activity {
             android.graphics.Bitmap bmp = null;
             HttpURLConnection c = null;
             try {
-                c = open(base, "api/cover/"
-                        + java.net.URLEncoder.encode(subsonicId, "UTF-8"), 5000);
+                c = Http.open(base, "api/cover/"
+                        + java.net.URLEncoder.encode(subsonicId, "UTF-8"),
+                        5000, store.savedAuth(base));
                 byte[] data;
                 try (InputStream in = c.getInputStream()) {
-                    data = readBytesCapped(in, MAX_COVER_BYTES);
+                    data = Http.readBytesCapped(in, Http.MAX_COVER_BYTES);
                 }
-                if (data != null) bmp = decodeCover(data, artPx);
+                if (data != null) bmp = Http.decodeCover(data, artPx);
             } catch (Exception ignored) {
-            } finally { close(c); }
+            } finally { Http.close(c); }
             final android.graphics.Bitmap out = bmp;
             ui.post(() -> {
                 if (out != null && subsonicId.equals(shownCoverId)) npArt.setImageBitmap(out);
@@ -1400,29 +1139,10 @@ public class MainActivity extends Activity {
     /* Password-protected stations (HTTP basic auth)                       */
     /* ------------------------------------------------------------------ */
 
-    /** Bare hostname of a URL, lowercased, or null if it won't parse. */
-    private static String hostOf(String url) {
-        if (url == null) return null;
-        try {
-            String h = new URL(url).getHost();
-            return h == null || h.isEmpty() ? null : h.toLowerCase(Locale.US);
-        } catch (Exception e) {
-            return null;
-        }
-    }
 
-    /**
-     * Whether `host` is the station currently tuned. Deliberately compares the
-     * host alone: a station may legitimately redirect itself between ports, or
-     * upgrade http to https, and both stay under the operator's control. A
-     * different HOST is the thing worth refusing. The argument may arrive as
-     * either "name" or "name:port" depending on the caller.
-     */
+    /** Whether `host` is the station currently tuned — see StationStore.sameHost. */
     private boolean isStationHost(String host) {
-        if (host == null) return false;
-        String station = hostOf(currentUrl);
-        return station != null
-                && station.equals(host.split(":", 2)[0].toLowerCase(Locale.US));
+        return StationStore.sameHost(host, currentUrl);
     }
 
     /**
@@ -1432,43 +1152,13 @@ public class MainActivity extends Activity {
      */
     private boolean blockOffStation(String url) {
         if (url == null || currentUrl == null) return false;
-        if (isStationHost(hostOf(url))) return false;
+        if (isStationHost(StationStore.hostOf(url))) return false;
         ui.post(() -> Toast.makeText(this,
                 "That link leaves the station — Wave TV stays on the one you tuned",
                 Toast.LENGTH_SHORT).show());
         return true;
     }
 
-    /** Credentials are keyed by origin so every station keeps its own. */
-    private static String authKey(String url) {
-        try {
-            URL u = new URL(url);
-            return "auth:" + u.getProtocol() + "://" + u.getHost()
-                    + (u.getPort() > 0 ? ":" + u.getPort() : "");
-        } catch (Exception e) {
-            return "auth:" + url;
-        }
-    }
-
-    private String savedAuth(String url) {
-        return prefs().getString(authKey(url), null);
-    }
-
-    /**
-     * Attach a stored Basic credential, if this station has one.
-     *
-     * Attaching one also pins the request to the host being addressed:
-     * HttpURLConnection replays request headers onto redirect targets, so a
-     * station answering /api/health with a 302 elsewhere would be handed the
-     * password. Redirects are only refused when there is a credential to
-     * protect, so stations without one keep working exactly as before.
-     */
-    private void applyAuth(HttpURLConnection c, String url) {
-        String cred = savedAuth(url);
-        if (cred == null) return;
-        c.setInstanceFollowRedirects(false);
-        c.setRequestProperty("Authorization", "Basic " + cred);
-    }
 
     /**
      * A station behind HTTP basic auth. Ask once, optionally remember, and hand
@@ -1535,7 +1225,7 @@ public class MainActivity extends Activity {
                         String enc = android.util.Base64.encodeToString(
                                 (u + ":" + p).getBytes(StandardCharsets.UTF_8),
                                 android.util.Base64.NO_WRAP);
-                        prefs().edit().putString(authKey(url), enc).apply();
+                        store.saveAuth(url, enc);
                     }
                     handler.proceed(u, p);
                 })
@@ -1629,11 +1319,11 @@ public class MainActivity extends Activity {
                 HttpURLConnection c = null;
                 try {
                     String base = url.endsWith("/") ? url : url + "/";
-                    c = open(base, "api/health", 3000);
+                    c = Http.open(base, "api/health", 3000, store.savedAuth(base));
                     int code = c.getResponseCode();
                     ok = code >= 200 && code < 500; // a 401 still means it's there
                 } catch (Exception ignored) {
-                } finally { close(c); }
+                } finally { Http.close(c); }
                 final boolean reachable = ok;
                 ui.post(() -> {
                     boolean changed = reachable ? unreachable.remove(url) : unreachable.add(url);
@@ -1646,7 +1336,7 @@ public class MainActivity extends Activity {
     private void openStation(int index) {
         if (index < 0 || index >= stations.size()) return;
         Station st = stations.get(index);
-        rememberLastStation(st.url);
+        store.rememberLast(st.url);
         stationsPanel.setVisibility(View.GONE);
         ui.removeCallbacks(nowPlayingPoll);
         boolean wasLoaded = pageLoaded; // captured before the reload clears it
@@ -1717,16 +1407,16 @@ public class MainActivity extends Activity {
 
     private GradientDrawable fieldBg() {
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(blend(palette.bg, palette.ink, 0.06f));
+        bg.setColor(Colors.blend(palette.bg, palette.ink, 0.06f));
         bg.setCornerRadius(dp(6));
-        bg.setStroke(dp(1), withAlpha(palette.ink, 90));
+        bg.setStroke(dp(1), Colors.withAlpha(palette.ink, 90));
         return bg;
     }
 
     /** Accent outline while the view holds D-pad focus. */
     private void strokeOnFocus(View v, final GradientDrawable bg) {
         v.setOnFocusChangeListener((view, has) ->
-                bg.setStroke(dp(has ? 2 : 1), has ? palette.accent : withAlpha(palette.ink, 90)));
+                bg.setStroke(dp(has ? 2 : 1), has ? palette.accent : Colors.withAlpha(palette.ink, 90)));
     }
 
     private EditText dlgField(String hintText) {
@@ -1734,7 +1424,7 @@ public class MainActivity extends Activity {
         e.setSingleLine(true);
         e.setHint(hintText);
         e.setTextColor(palette.ink);
-        e.setHintTextColor(withAlpha(palette.muted, 130));
+        e.setHintTextColor(Colors.withAlpha(palette.muted, 130));
         e.setTextSize(16);
         e.setTypeface(Typeface.MONOSPACE);
         GradientDrawable bg = fieldBg();
@@ -1768,28 +1458,6 @@ public class MainActivity extends Activity {
         return b;
     }
 
-    /**
-     * What is wrong with a typed address, or null if nothing is.
-     *
-     * A station URL is concatenated with "api/…" in four places, so anything
-     * carrying a query or fragment quietly produces a nonsense endpoint —
-     * "host/#x" becomes "http://host/#x/api/now-playing", which is a request
-     * to the root. A path is fine and deliberately allowed; a station may well
-     * live at example.com/radio. Userinfo is refused outright: to a reader
-     * "station.local@evil.com" is the station, and to a URL parser it is not.
-     */
-    private static String addressProblem(String host) {
-        if (host.isEmpty()) return "A station needs an address";
-        if (host.indexOf('@') >= 0) return "An address can't contain “@”";
-        if (host.indexOf('?') >= 0 || host.indexOf('#') >= 0) {
-            return "An address can't contain “?” or “#”";
-        }
-        if (host.indexOf(' ') >= 0 || host.indexOf('\t') >= 0) {
-            return "An address can't contain spaces";
-        }
-        if (hostOf("http://" + host) == null) return "That doesn't look like an address";
-        return null;
-    }
 
     /** A null station means add new; otherwise edit that one. */
     private void showStationDialog(final Station editing) {
@@ -1834,8 +1502,8 @@ public class MainActivity extends Activity {
         schemeRow.addView(httpsBtn, sLp);
         box.addView(schemeRow);
 
-        final int schemeOff = blend(palette.bg, palette.ink, 0.06f);
-        final int schemeOn = withAlpha(palette.accent, 70);
+        final int schemeOff = Colors.blend(palette.bg, palette.ink, 0.06f);
+        final int schemeOn = Colors.withAlpha(palette.accent, 70);
         final Runnable styleScheme = () -> {
             httpBtn.setTextColor(useHttps[0] ? palette.muted : palette.ink);
             ((GradientDrawable) httpBtn.getBackground())
@@ -1877,7 +1545,7 @@ public class MainActivity extends Activity {
 
         final Runnable commit = () -> {
             String host = hostIn.getText().toString().trim().replaceFirst("^https?://", "");
-            String problem = addressProblem(host);
+            String problem = StationStore.addressProblem(host);
             if (problem != null) {
                 Toast.makeText(this, problem, Toast.LENGTH_SHORT).show();
                 return;
@@ -1957,22 +1625,19 @@ public class MainActivity extends Activity {
             editing.name = name;
             editing.url = url;
             if (!oldUrl.equals(url)) {
-                if (oldUrl.equals(lastStationUrl())) rememberLastStation(url);
+                if (oldUrl.equals(lastStationUrl())) store.rememberLast(url);
                 unreachable.remove(oldUrl); // the old address is nobody's now
                 // Carry any saved password to the new address, and make
                 // sure a station being edited while on air reloads rather
                 // than leaving the card polling the old host.
-                String cred = prefs().getString(authKey(oldUrl), null);
-                SharedPreferences.Editor e = prefs().edit().remove(authKey(oldUrl));
-                if (cred != null) e.putString(authKey(url), cred);
-                e.apply();
+                store.moveAuth(oldUrl, url);
                 if (oldUrl.equals(currentUrl)) {
                     currentUrl = url;
                     loadStation(url); // same path as tuning it, cache-bust and all
                 }
             }
         }
-        saveStations();
+        store.save(stations);
         refreshStationList();
         // A station added to an empty list also needs the pollers that
         // showStations() would normally have started, and a liveness probe.
@@ -1993,7 +1658,7 @@ public class MainActivity extends Activity {
         if (index < 0 || index >= stations.size()) return;
         final Station st = stations.get(index);
         // "Forget saved password" only appears for a station that has one.
-        final boolean hasSaved = savedAuth(st.url) != null;
+        final boolean hasSaved = store.savedAuth(st.url) != null;
         final ArrayList<String> items = new ArrayList<>();
         items.add("Tune in");
         items.add("Edit");
@@ -2015,7 +1680,7 @@ public class MainActivity extends Activity {
                     } else if (choice.equals("Move down")) {
                         moveStation(st, 1);
                     } else if (choice.equals("Forget saved password")) {
-                        prefs().edit().remove(authKey(st.url)).apply();
+                        store.forgetAuth(st.url);
                         Toast.makeText(this, "Saved password forgotten", Toast.LENGTH_SHORT).show();
                     } else {
                         new AlertDialog.Builder(this)
@@ -2030,9 +1695,9 @@ public class MainActivity extends Activity {
 
     private void removeStation(Station st) {
         if (!stations.remove(st)) return; // already gone
-        prefs().edit().remove(authKey(st.url)).apply();
+        store.forgetAuth(st.url);
         unreachable.remove(st.url);
-        saveStations();
+        store.save(stations);
         refreshStationList();
     }
 
@@ -2046,7 +1711,7 @@ public class MainActivity extends Activity {
         if (from < 0 || to < 0 || to >= stations.size()) return;
         stations.remove(from);
         stations.add(to, st);
-        saveStations();
+        store.save(stations);
         refreshStationList();
         stationsListView.setSelection(to);
     }
@@ -2063,10 +1728,10 @@ public class MainActivity extends Activity {
             String found = null;
             HttpURLConnection c = null;
             try {
-                c = open(base, "api/now-playing", 5000);
+                c = Http.open(base, "api/now-playing", 5000, store.savedAuth(base));
                 String body;
                 try (InputStream in = c.getInputStream()) {
-                    body = readTextCapped(in, MAX_JSON_CHARS);
+                    body = Http.readTextCapped(in, Http.MAX_JSON_CHARS);
                 }
                 JSONObject dj = new JSONObject(body).optJSONObject("dj");
                 if (dj != null) {
@@ -2074,14 +1739,14 @@ public class MainActivity extends Activity {
                     if (!s.isEmpty()) found = s;
                 }
             } catch (Exception ignored) {
-            } finally { close(c); }
+            } finally { Http.close(c); }
             final String name = found;
             if (name == null) return;
             ui.post(() -> {
                 for (Station st : stations) {
                     if (st.url.equals(url)) {
                         st.name = name;
-                        saveStations();
+                        store.save(stations);
                         refreshStationList();
                         return;
                     }
@@ -2090,30 +1755,6 @@ public class MainActivity extends Activity {
         });
     }
 
-    private ArrayList<Station> loadStations() {
-        ArrayList<Station> out = new ArrayList<>();
-        try {
-            JSONArray arr = new JSONArray(prefs().getString(KEY_STATIONS, "[]"));
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject o = arr.getJSONObject(i);
-                out.add(new Station(o.optString("name", "Station"), o.getString("url")));
-            }
-        } catch (Exception ignored) {}
-        return out;
-    }
-
-    private void saveStations() {
-        try {
-            JSONArray arr = new JSONArray();
-            for (Station st : stations) {
-                JSONObject o = new JSONObject();
-                o.put("name", st.name);
-                o.put("url", st.url);
-                arr.put(o);
-            }
-            prefs().edit().putString(KEY_STATIONS, arr.toString()).apply();
-        } catch (Exception ignored) {}
-    }
 
     /* ------------------------------------------------------------------ */
     /* Remote keys                                                         */
@@ -2315,7 +1956,7 @@ public class MainActivity extends Activity {
         b.setAllCaps(false);
         b.setTextSize(15);
         b.setTypeface(Typeface.MONOSPACE);
-        b.setTextColor(MUTED);
+        b.setTextColor(Colors.MUTED);
         b.setMinWidth(0);
         b.setMinimumWidth(0);
         b.setMinHeight(0);
@@ -2335,9 +1976,9 @@ public class MainActivity extends Activity {
     private void styleChip(android.widget.Button b, boolean focused) {
         GradientDrawable bg = chipBgs.get(b);
         if (bg == null) return;
-        bg.setColor(focused ? withAlpha(palette.accent, 46) : palette.surface);
+        bg.setColor(focused ? Colors.withAlpha(palette.accent, 46) : palette.surface);
         bg.setStroke(dp(focused ? 2 : 1),
-                focused ? palette.accent : withAlpha(palette.ink, 90));
+                focused ? palette.accent : Colors.withAlpha(palette.ink, 90));
         b.setTextColor(focused ? palette.ink : palette.muted);
         // The drawn glyph has no text colour to inherit.
         if (b == themeChip && themeGlyph != null) {
@@ -2541,54 +2182,6 @@ public class MainActivity extends Activity {
         return sb.append('"').toString();
     }
 
-    /* A station is an arbitrary host typed in by hand. Nothing it returns is
-     * read without a ceiling: an endless or enormous body would otherwise be
-     * buffered until the app dies, which is a bad way for a radio to fail. */
-    private static final int MAX_JSON_CHARS = 256 * 1024;
-    private static final int MAX_COVER_BYTES = 4 * 1024 * 1024;
-
-    /** Read at most `limit` characters of a response body. */
-    private static String readTextCapped(InputStream in, int limit) throws java.io.IOException {
-        InputStreamReader r = new InputStreamReader(in, StandardCharsets.UTF_8);
-        StringBuilder sb = new StringBuilder();
-        char[] buf = new char[8192];
-        int n;
-        while (sb.length() < limit
-                && (n = r.read(buf, 0, Math.min(buf.length, limit - sb.length()))) > 0) {
-            sb.append(buf, 0, n);
-        }
-        return sb.toString();
-    }
-
-    /** Read a whole body, or null if it runs past `limit` — a part image is no use. */
-    private static byte[] readBytesCapped(InputStream in, int limit) throws java.io.IOException {
-        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-        byte[] buf = new byte[8192];
-        int n;
-        while ((n = in.read(buf)) > 0) {
-            if (out.size() + n > limit) return null;
-            out.write(buf, 0, n);
-        }
-        return out.toByteArray();
-    }
-
-    /**
-     * Decode a cover at roughly the size the card draws it, whatever dimensions
-     * the station actually sent. The old fixed inSampleSize of 2 meant a
-     * 10000px master still allocated a 5000px bitmap to fill a 62dp square.
-     */
-    private static android.graphics.Bitmap decodeCover(byte[] data, int targetPx) {
-        android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
-        o.inJustDecodeBounds = true;
-        android.graphics.BitmapFactory.decodeByteArray(data, 0, data.length, o);
-        int sample = 1;
-        while (o.outWidth / (sample * 2) >= targetPx && o.outHeight / (sample * 2) >= targetPx) {
-            sample *= 2;
-        }
-        o.inJustDecodeBounds = false;
-        o.inSampleSize = sample;
-        return android.graphics.BitmapFactory.decodeByteArray(data, 0, data.length, o);
-    }
 
     private String readAsset(String name) {
         try (InputStream in = getAssets().open(name);
