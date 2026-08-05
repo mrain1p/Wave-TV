@@ -1351,50 +1351,122 @@ public class MainActivity extends Activity {
         }
         styleScheme.run();
 
-        AlertDialog dlg = new AlertDialog.Builder(this)
+        // Done on the keyboard should save, exactly as the Save button does —
+        // having to dismiss the IME and hunt for a button is a poor way to end
+        // a form on a remote. NEXT moves name -> address without closing it.
+        nameIn.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_NEXT);
+        hostIn.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+
+        final AlertDialog dlg = new AlertDialog.Builder(this)
                 .setView(box)
-                .setPositiveButton("Save", (d, w) -> {
-                    String name = nameIn.getText().toString().trim();
-                    String host = hostIn.getText().toString().trim()
-                            .replaceFirst("^https?://", "");
-                    if (host.isEmpty()) {
-                        Toast.makeText(this, "A station needs an address", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    String url = (useHttps[0] ? "https://" : "http://") + host;
-                    boolean autoName = name.isEmpty();
-                    if (autoName) name = host; // placeholder until the station answers
-                    if (index < 0) {
-                        stations.add(new Station(name, url));
-                    } else {
-                        Station st = stations.get(index);
-                        String oldUrl = st.url;
-                        st.name = name;
-                        st.url = url;
-                        if (!oldUrl.equals(url)) {
-                            // Carry any saved password to the new address, and make
-                            // sure a station being edited while on air reloads rather
-                            // than leaving the card polling the old host.
-                            String cred = prefs().getString(authKey(oldUrl), null);
-                            SharedPreferences.Editor e = prefs().edit().remove(authKey(oldUrl));
-                            if (cred != null) e.putString(authKey(url), cred);
-                            e.apply();
-                            if (oldUrl.equals(currentUrl)) {
-                                currentUrl = url;
-                                pageLoaded = false;
-                                shownCoverId = null;
-                                web.loadUrl(url);
-                            }
-                        }
-                    }
-                    saveStations();
-                    refreshStationList();
-                    if (autoName) fetchStationName(url);
-                })
+                // Deliberately null: the builder's own listener dismisses
+                // unconditionally, which would throw away the entry when the
+                // address is empty. The real handler is attached in onShow.
+                .setPositiveButton("Save", null)
                 .setNegativeButton("Cancel", null)
                 .create();
 
+        final Runnable commit = () -> {
+            String host = hostIn.getText().toString().trim().replaceFirst("^https?://", "");
+            if (host.isEmpty()) {
+                Toast.makeText(this, "A station needs an address", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            // Drop the IME while its own field still exists; once the dialog
+            // window is gone there is no token to hide it from, and it sits
+            // over the picker swallowing every remote key.
+            hideKeyboardFrom(hostIn);
+            saveStation(index, nameIn.getText().toString().trim(), host, useHttps[0]);
+            dlg.dismiss();
+        };
+
+        nameIn.setOnEditorActionListener((v, actionId, ev) -> {
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_NEXT) {
+                activateField(hostIn);
+                return true;
+            }
+            return false;
+        });
+        hostIn.setOnEditorActionListener((v, actionId, ev) -> {
+            boolean done = actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE
+                    || actionId == android.view.inputmethod.EditorInfo.IME_ACTION_GO
+                    || actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND
+                    // Some TV keyboards send a bare ENTER rather than an action id.
+                    || (ev != null && ev.getKeyCode() == KeyEvent.KEYCODE_ENTER
+                            && ev.getAction() == KeyEvent.ACTION_DOWN);
+            if (done) { commit.run(); return true; }
+            return false;
+        });
+
+        dlg.setOnShowListener(d ->
+                dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> commit.run()));
+
+        // However the dialog ends — saved, cancelled or Back — the picker has
+        // to be left usable. The list may have only just come into existence
+        // (it replaces the empty view on the very first station), so nothing
+        // holds focus unless it is given explicitly, and the remote does
+        // nothing at all until the app is restarted.
+        dlg.setOnDismissListener(d -> stationsPanel.post(() -> {
+            hideKeyboardFrom(stationsPanel);
+            if (!stationsVisible()) return;
+            if (stations.isEmpty()) addChip.requestFocus();
+            else stationsListView.requestFocus();
+        }));
+
         dlg.show();
+    }
+
+    /** Open a field for typing — the explicit OK press the keyboard gate wants. */
+    private void activateField(EditText e) {
+        e.requestFocus();
+        e.setShowSoftInputOnFocus(true);
+        InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (imm != null) imm.showSoftInput(e, InputMethodManager.SHOW_IMPLICIT);
+    }
+
+    private void hideKeyboardFrom(View v) {
+        InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (imm != null && v != null && v.getWindowToken() != null) {
+            imm.hideSoftInputFromWindow(v.getWindowToken(), 0);
+        }
+    }
+
+    /** The Save half of the add/edit dialog. index -1 = add new. */
+    private void saveStation(int index, String name, String host, boolean useHttps) {
+        String url = (useHttps ? "https://" : "http://") + host;
+        boolean autoName = name.isEmpty();
+        if (autoName) name = host; // placeholder until the station answers
+        if (index < 0) {
+            stations.add(new Station(name, url));
+        } else {
+            Station st = stations.get(index);
+            String oldUrl = st.url;
+            st.name = name;
+            st.url = url;
+            if (!oldUrl.equals(url)) {
+                // Carry any saved password to the new address, and make
+                // sure a station being edited while on air reloads rather
+                // than leaving the card polling the old host.
+                String cred = prefs().getString(authKey(oldUrl), null);
+                SharedPreferences.Editor e = prefs().edit().remove(authKey(oldUrl));
+                if (cred != null) e.putString(authKey(url), cred);
+                e.apply();
+                if (oldUrl.equals(currentUrl)) {
+                    currentUrl = url;
+                    pageLoaded = false;
+                    shownCoverId = null;
+                    web.loadUrl(url);
+                }
+            }
+        }
+        saveStations();
+        refreshStationList();
+        // A station added to an empty list also needs the pollers that
+        // showStations() would normally have started, and a liveness probe.
+        probeStations();
+        ui.removeCallbacks(nowPlayingPoll);
+        ui.post(nowPlayingPoll);
+        if (autoName) fetchStationName(url);
     }
 
     private void showStationOptions(final int index) {
