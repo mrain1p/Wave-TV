@@ -302,10 +302,45 @@ public class MainActivity extends Activity {
                         : "The station's server answered HTTP " + code + ".");
             }
 
+            /**
+             * Refuse to load anything but the tuned station in the main frame.
+             *
+             * Everything this shell hands the page is scoped to the station it
+             * was asked to load: the WaveTV bridge, the injected remote layer,
+             * autoplay without a user gesture, cleartext HTTP, and a stored
+             * password. A page that walked the main frame somewhere else would
+             * inherit the lot. There is nothing to browse to on a television,
+             * so off-origin main-frame navigation is simply declined.
+             */
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view,
+                                                    android.webkit.WebResourceRequest request) {
+                if (request == null || !request.isForMainFrame()) return false;
+                return blockOffStation(request.getUrl() == null ? null
+                        : request.getUrl().toString());
+            }
+
+            /** API 22-23 has no request object here; those call this instead. */
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                return blockOffStation(url);
+            }
+
             @Override
             public void onReceivedHttpAuthRequest(WebView view,
                                                   android.webkit.HttpAuthHandler handler,
                                                   String host, String realm) {
+                // `host` is whoever is actually challenging, which is not
+                // necessarily the station: any sub-resource can raise a 401.
+                // Answering one with the station's credential would hand the
+                // password to a third party, and prompting for a fresh one
+                // under this app's own "STATION IS LOCKED" heading would be a
+                // convincing place to phish it. Anything that isn't the
+                // station we tuned is refused rather than answered.
+                if (!isStationHost(host)) {
+                    handler.cancel();
+                    return;
+                }
                 // Reuse a stored credential silently; otherwise ask. useHttpAuthUsernamePassword
                 // is false on a retry, which means the stored one was rejected.
                 String saved = currentUrl == null ? null : savedAuth(currentUrl);
@@ -1077,13 +1112,11 @@ public class MainActivity extends Activity {
                         c.setConnectTimeout(4000);
                         c.setReadTimeout(4000);
                         applyAuth(c, base);
-                        StringBuilder sb = new StringBuilder();
-                        try (BufferedReader r = new BufferedReader(
-                                new InputStreamReader(c.getInputStream(), StandardCharsets.UTF_8))) {
-                            String l;
-                            while ((l = r.readLine()) != null) sb.append(l);
+                        String body;
+                        try (InputStream in = c.getInputStream()) {
+                            body = readTextCapped(in, MAX_JSON_CHARS);
                         }
-                        JSONObject o = new JSONObject(sb.toString());
+                        JSONObject o = new JSONObject(body);
                         JSONObject np = o.optJSONObject("nowPlaying");
                         JSONObject dj = o.optJSONObject("dj");
                         int listeners = o.optInt("listeners", -1);
@@ -1154,6 +1187,7 @@ public class MainActivity extends Activity {
         if (subsonicId == null || subsonicId.isEmpty()) { setCover(null); return; }
         if (subsonicId.equals(shownCoverId)) return;
         shownCoverId = subsonicId;
+        final int artPx = dp(62); // the square the card draws it into
         new Thread(() -> {
             android.graphics.Bitmap bmp = null;
             try {
@@ -1163,11 +1197,11 @@ public class MainActivity extends Activity {
                 c.setConnectTimeout(5000);
                 c.setReadTimeout(5000);
                 applyAuth(c, base);
+                byte[] data;
                 try (InputStream in = c.getInputStream()) {
-                    android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
-                    o.inSampleSize = 2; // the card renders it small
-                    bmp = android.graphics.BitmapFactory.decodeStream(in, null, o);
+                    data = readBytesCapped(in, MAX_COVER_BYTES);
                 }
+                if (data != null) bmp = decodeCover(data, artPx);
             } catch (Exception ignored) {}
             final android.graphics.Bitmap out = bmp;
             ui.post(() -> {
@@ -1180,6 +1214,45 @@ public class MainActivity extends Activity {
     /* ------------------------------------------------------------------ */
     /* Password-protected stations (HTTP basic auth)                       */
     /* ------------------------------------------------------------------ */
+
+    /** Bare hostname of a URL, lowercased, or null if it won't parse. */
+    private static String hostOf(String url) {
+        if (url == null) return null;
+        try {
+            String h = new URL(url).getHost();
+            return h == null || h.isEmpty() ? null : h.toLowerCase(Locale.US);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Whether `host` is the station currently tuned. Deliberately compares the
+     * host alone: a station may legitimately redirect itself between ports, or
+     * upgrade http to https, and both stay under the operator's control. A
+     * different HOST is the thing worth refusing. The argument may arrive as
+     * either "name" or "name:port" depending on the caller.
+     */
+    private boolean isStationHost(String host) {
+        if (host == null) return false;
+        String station = hostOf(currentUrl);
+        return station != null
+                && station.equals(host.split(":", 2)[0].toLowerCase(Locale.US));
+    }
+
+    /**
+     * True when a navigation must be swallowed because it leaves the station.
+     * Before a station is tuned there is nothing to compare against, so the
+     * initial load is always allowed through.
+     */
+    private boolean blockOffStation(String url) {
+        if (url == null || currentUrl == null) return false;
+        if (isStationHost(hostOf(url))) return false;
+        ui.post(() -> Toast.makeText(this,
+                "That link leaves the station — Wave TV stays on the one you tuned",
+                Toast.LENGTH_SHORT).show());
+        return true;
+    }
 
     /** Credentials are keyed by origin so every station keeps its own. */
     private static String authKey(String url) {
@@ -1196,10 +1269,20 @@ public class MainActivity extends Activity {
         return prefs().getString(authKey(url), null);
     }
 
-    /** Attach a stored Basic credential, if this station has one. */
+    /**
+     * Attach a stored Basic credential, if this station has one.
+     *
+     * Attaching one also pins the request to the host being addressed:
+     * HttpURLConnection replays request headers onto redirect targets, so a
+     * station answering /api/health with a 302 elsewhere would be handed the
+     * password. Redirects are only refused when there is a credential to
+     * protect, so stations without one keep working exactly as before.
+     */
     private void applyAuth(HttpURLConnection c, String url) {
         String cred = savedAuth(url);
-        if (cred != null) c.setRequestProperty("Authorization", "Basic " + cred);
+        if (cred == null) return;
+        c.setInstanceFollowRedirects(false);
+        c.setRequestProperty("Authorization", "Basic " + cred);
     }
 
     /**
@@ -1222,7 +1305,12 @@ public class MainActivity extends Activity {
         box.addView(heading);
 
         TextView blurb = new TextView(this);
-        blurb.setText("This station asks for a username and password.");
+        // Name the station rather than leaving "this station" to the viewer's
+        // assumption — the prompt is worth a lot to anyone who can provoke it.
+        // The name, not the address: same screenshot reasoning as the picker.
+        String who = currentStationName();
+        blurb.setText((who.isEmpty() ? "This station" : who)
+                + " asks for a username and password.");
         blurb.setTextColor(palette.muted);
         blurb.setTextSize(12);
         blurb.setTypeface(Typeface.MONOSPACE);
@@ -1738,13 +1826,11 @@ public class MainActivity extends Activity {
                 c.setConnectTimeout(5000);
                 c.setReadTimeout(5000);
                 applyAuth(c, base);
-                StringBuilder sb = new StringBuilder();
-                try (BufferedReader r = new BufferedReader(
-                        new InputStreamReader(c.getInputStream(), StandardCharsets.UTF_8))) {
-                    String l;
-                    while ((l = r.readLine()) != null) sb.append(l);
+                String body;
+                try (InputStream in = c.getInputStream()) {
+                    body = readTextCapped(in, MAX_JSON_CHARS);
                 }
-                JSONObject dj = new JSONObject(sb.toString()).optJSONObject("dj");
+                JSONObject dj = new JSONObject(body).optJSONObject("dj");
                 if (dj != null) {
                     String s = dj.optString("station", "");
                     if (!s.isEmpty()) found = s;
@@ -2196,6 +2282,55 @@ public class MainActivity extends Activity {
             }
         }
         return sb.append('"').toString();
+    }
+
+    /* A station is an arbitrary host typed in by hand. Nothing it returns is
+     * read without a ceiling: an endless or enormous body would otherwise be
+     * buffered until the app dies, which is a bad way for a radio to fail. */
+    private static final int MAX_JSON_CHARS = 256 * 1024;
+    private static final int MAX_COVER_BYTES = 4 * 1024 * 1024;
+
+    /** Read at most `limit` characters of a response body. */
+    private static String readTextCapped(InputStream in, int limit) throws java.io.IOException {
+        InputStreamReader r = new InputStreamReader(in, StandardCharsets.UTF_8);
+        StringBuilder sb = new StringBuilder();
+        char[] buf = new char[8192];
+        int n;
+        while (sb.length() < limit
+                && (n = r.read(buf, 0, Math.min(buf.length, limit - sb.length()))) > 0) {
+            sb.append(buf, 0, n);
+        }
+        return sb.toString();
+    }
+
+    /** Read a whole body, or null if it runs past `limit` — a part image is no use. */
+    private static byte[] readBytesCapped(InputStream in, int limit) throws java.io.IOException {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[8192];
+        int n;
+        while ((n = in.read(buf)) > 0) {
+            if (out.size() + n > limit) return null;
+            out.write(buf, 0, n);
+        }
+        return out.toByteArray();
+    }
+
+    /**
+     * Decode a cover at roughly the size the card draws it, whatever dimensions
+     * the station actually sent. The old fixed inSampleSize of 2 meant a
+     * 10000px master still allocated a 5000px bitmap to fill a 62dp square.
+     */
+    private static android.graphics.Bitmap decodeCover(byte[] data, int targetPx) {
+        android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+        o.inJustDecodeBounds = true;
+        android.graphics.BitmapFactory.decodeByteArray(data, 0, data.length, o);
+        int sample = 1;
+        while (o.outWidth / (sample * 2) >= targetPx && o.outHeight / (sample * 2) >= targetPx) {
+            sample *= 2;
+        }
+        o.inJustDecodeBounds = false;
+        o.inSampleSize = sample;
+        return android.graphics.BitmapFactory.decodeByteArray(data, 0, data.length, o);
     }
 
     private String readAsset(String name) {

@@ -136,6 +136,11 @@ a remote. What that involves:
   `http://` station's login form. That is a reasonable trade on a private LAN
   and a poor one across the internet. Use `https://` for anything reachable
   from outside the network.
+- **Only the tuned station is ever asked for, or told, a password.** A page can
+  provoke an authentication prompt, and this app's own prompt is a convincing
+  thing to be shown. Any challenge that comes from a host other than the
+  station is refused rather than answered, a saved credential is never replayed
+  to anything else, and a request carrying one will not follow a redirect.
 - Treat a hobby radio station as a place not to reuse an important password.
 
 ## Known limitations
@@ -145,6 +150,10 @@ a remote. What that involves:
   appears here, and the fix belongs upstream.
 - **No Chromecast or second-screen support.** Playback is local to the
   television.
+- **Links out of the station don't open.** The player stays on the host you
+  tuned; a link to somewhere else is declined rather than followed. There is no
+  browser here to hand it to, and everything the shell grants the page — the
+  native bridge, autoplay, a saved password — is granted to that station alone.
 - **Voice dictation depends on the remote and the device.** Where a
   manufacturer does not expose the recogniser to third-party applications, the
   on-screen keyboard is the only input.

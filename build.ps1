@@ -39,6 +39,11 @@ if (-not $ksPass) {
         [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
 }
 if (-not $ksPass) { throw "No keystore password supplied" }
+# Hand the password to keytool and apksigner through the environment rather
+# than on their command lines, where any other process on the machine can read
+# it out of the process table. Both tools accept an env-var reference; this
+# also covers the prompt path above, which otherwise had nothing to export.
+$env:WAVETV_KEYSTORE_PASS = $ksPass
 
 Write-Host "JDK:        $jdk"
 Write-Host "BuildTools: $bt"
@@ -83,11 +88,12 @@ $ks = Join-Path $root 'wave-tv.jks'
 if (-not (Test-Path $ks)) {
     Write-Host "      no keystore at $ks - generating one"
     & $keytool -genkeypair -keystore $ks -alias wavetv -keyalg RSA -keysize 2048 `
-        -validity 10000 -storepass $ksPass -keypass $ksPass -dname "CN=Wave TV"
+        -validity 10000 -storepass:env WAVETV_KEYSTORE_PASS `
+        -keypass:env WAVETV_KEYSTORE_PASS -dname "CN=Wave TV"
     if ($LASTEXITCODE) { throw "keytool failed" }
 }
 & $apksigner sign --ks $ks --ks-key-alias wavetv `
-    --ks-pass "pass:$ksPass" --key-pass "pass:$ksPass" `
+    --ks-pass env:WAVETV_KEYSTORE_PASS --key-pass env:WAVETV_KEYSTORE_PASS `
     --out "$root\WaveTV.apk" "$build\aligned.apk"
 if ($LASTEXITCODE) { throw "apksigner failed" }
 & $apksigner verify "$root\WaveTV.apk"
