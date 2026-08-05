@@ -2124,9 +2124,12 @@ public class MainActivity extends Activity {
                     if (System.currentTimeMillis() - keyboardOpenedAt < KEYBOARD_SETTLE_MS) return;
                     fieldToken = 0;
                     fieldActivated = false;
-                    InputMethodManager imm =
-                            (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
-                    if (imm != null) imm.hideSoftInputFromWindow(web.getWindowToken(), 0);
+                    // Through the same checked door as every other dismissal.
+                    // This one is posted from the bridge's own thread, so it
+                    // can land after onDestroy has detached and nulled the
+                    // WebView — reaching for web.getWindowToken() directly was
+                    // the one asynchronous caller still doing so unguarded.
+                    hideKeyboardFrom(web);
                 } else if (token != fieldToken) {
                     fieldToken = token;   // a different field — OK must unlock it again
                     fieldActivated = false;
