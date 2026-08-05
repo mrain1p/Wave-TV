@@ -14,24 +14,18 @@ Please note this was created with use of AI. It is an unofficial community
 player, not an official SUB/WAVE release, and it is installed by sideloading —
 review the source or build it yourself if that matters to you.
 
-![The Wave TV station picker](docs/station-picker.jpg)
-
-*The only screen the app draws. Station list with now-playing track, cover art
-and transport, polled from the station's public API; theme toggle and sleep
-timer in the masthead. Station addresses are never displayed here. Station name
-redacted.*
-
-![A SUB/WAVE web player running fullscreen on a television](docs/player.jpg)
-
-*Everything past the picker is SUB/WAVE's interface. The masthead, typography,
-waveform, commentary line and side rail are the station's own web player and
-the operator's chosen theme, unmodified. Wave TV contributes the focus
-navigation. Station branding redacted.*
-
-![The request drawer, reached by remote](docs/request.jpg)
-
-*SUB/WAVE's request drawer, opened with the remote. Text arrives from the
-on-screen keyboard or from voice dictation. Station branding redacted.*
+<table>
+<tr>
+<td width="33%"><img src="docs/station-picker.jpg" width="100%" alt="The Wave TV station picker on a television" /></td>
+<td width="33%"><img src="docs/player.jpg" width="100%" alt="A SUB/WAVE web player running fullscreen on a television" /></td>
+<td width="33%"><img src="docs/request.jpg" width="100%" alt="The SUB/WAVE request drawer, opened with a remote" /></td>
+</tr>
+<tr>
+<td valign="top"><sub><b>The only screen the app draws.</b> Station list with now playing, cover art and transport, polled from the station's public API. Addresses are never displayed here. Station name redacted.</sub></td>
+<td valign="top"><sub><b>Everything past the picker is SUB/WAVE's interface.</b> Masthead, waveform, commentary line, side rail and the operator's theme, unmodified. Wave TV contributes the focus navigation. Branding redacted.</sub></td>
+<td valign="top"><sub><b>SUB/WAVE's request drawer, opened by remote.</b> Text arrives from the on-screen keyboard or from voice dictation. Branding redacted.</sub></td>
+</tr>
+</table>
 
 ## Features
 
