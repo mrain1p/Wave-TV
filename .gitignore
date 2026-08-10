@@ -15,3 +15,9 @@ SubwaveTV.apk
 
 # Raw, unblurred screenshots. Only the redacted copies in docs/ get published.
 docs/raw/
+
+# One-off design briefs handed to the implementer. They describe a change that
+# has already landed in the code, so publishing them adds nothing and dates
+# badly — the code and its comments are the record.
+picker-redesign-spec.md
+*-redesign-spec.md

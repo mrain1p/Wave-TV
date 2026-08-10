@@ -57,6 +57,8 @@ public class MainActivity extends Activity {
     private static final String PREFS = "wavetv";
     private static final String KEY_SLEEP_HOURS = "sleepHours";
     private static final String KEY_THEME_MODE = "themeMode";
+    /** Whether the picker hides the now-playing panel for a one-line strip. */
+    private static final String KEY_NP_MINIMAL = "npMinimal";
     private static final int SLEEP_HOURS_DEFAULT = 6;
     private static final int SLEEP_HOURS_MAX = 6;
     private static final int REQ_VOICE = 61;
@@ -79,16 +81,39 @@ public class MainActivity extends Activity {
     private StationAdapter stationsAdapter;
     private TextView nowPlayingText;
     private TextView npLabel;
-    private TextView npMeta;
+    private TextView npArtist, npAlbum;
+    /** The station name and "playing · <bitrate>" under the panel's transport. */
+    private TextView npStation, npStatus;
+    /** Show/DJ row — GONE unless the station's API actually names one. */
+    private View npShowRow;
+    private TextView npShowName;
     private android.widget.Button playButton;
     private android.widget.Button sleepChip;
     private android.widget.Button addChip;
     private android.widget.Button themeChip;
-    private TextView titleView, subView, noteView, emptyView;
-    private TextView colNum, colName, colStatus;
-    private View accentRule, hairRule, headRule, npRule;
+    private android.widget.Button npChip;
+    private TextView titleView, noteView, emptyView, footHint, footVersion;
+    private View accentRule, hairRule, npRule, npCaptionRule, npFootRule, stripRule;
     private ThemeGlyph themeGlyph;
-    private GradientDrawable npBgDrawable, artBgDrawable, playBgDrawable;
+    private MicGlyph micGlyph;
+    private GradientDrawable npBgDrawable, artBgDrawable;
+
+    /* --- the now-playing panel, and its minimal-mode counterpart ---------
+     * Both exist at once and only one is ever visible (see applyNpMinimal).
+     * They are separate view trees rather than one tree that moves, because a
+     * View has a single parent: re-parenting the transport between two layouts
+     * on every toggle would drop D-pad focus mid-press. Everything that has to
+     * stay in step is updated through the small loops below. */
+    private LinearLayout npPanel, minimalStrip, listColumn, bodyRow;
+    private android.widget.ImageView stripArt;
+    private TextView stripCaption, stripTrack;
+    private android.widget.Button stripPlay;
+    private GradientDrawable stripArtBg;
+    private LevelMeter panelMeter, stripMeter;
+    /** Every transport button, so the glyph and focus styling reach both. */
+    private final ArrayList<android.widget.Button> playButtons = new ArrayList<>();
+    private final java.util.Map<android.widget.Button, GradientDrawable> playBgs =
+            new java.util.HashMap<>();
     private final ArrayList<android.widget.Button> chips = new ArrayList<>();
     private final java.util.Map<android.widget.Button, GradientDrawable> chipBgs =
             new java.util.HashMap<>();
@@ -294,6 +319,7 @@ public class MainActivity extends Activity {
                 // startPalettePoll reschedules itself and simply stops mattering
                 // once the reading is settled.
                 ui.removeCallbacks(palettePoll);
+                resetPalettePoll(); // a new page is a new answer
                 ui.postDelayed(palettePoll, 800);
             }
 
@@ -424,49 +450,39 @@ public class MainActivity extends Activity {
         stationsPanel = new LinearLayout(this);
         stationsPanel.setOrientation(LinearLayout.VERTICAL);
         stationsPanel.setBackgroundColor(Colors.BG);
-        stationsPanel.setPadding(dp(64), dp(32), dp(64), dp(20));
+        stationsPanel.setPadding(dp(60), dp(32), dp(60), dp(24));
 
-        // Masthead: wordmark and hints on the left, sleep-timer chip on the right.
+        // Masthead: wordmark on the left, the chip rail on the right. The
+        // OK/HOLD/MENU hint that used to sit under the wordmark is now in the
+        // footer — it is a legend, and a legend belongs at the foot of the page
+        // rather than competing with the masthead for the eye.
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
 
-        LinearLayout headings = new LinearLayout(this);
-        headings.setOrientation(LinearLayout.VERTICAL);
-
         titleView = new TextView(this);
         titleView.setText("WAVE TV");
         titleView.setTextColor(Colors.INK);
-        titleView.setTextSize(30);
+        titleView.setTextSize(29);
         titleView.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
-        headings.addView(titleView);
-
-        subView = new TextView(this);
-        subView.setText("OK TUNE IN  ·  HOLD OK FOR OPTIONS  ·  MENU FOR SETTINGS");
-        subView.setTextColor(Colors.MUTED);
-        subView.setTextSize(10);
-        // Was the one line on this screen in the system sans, directly under a
-        // monospace wordmark. A family mismatch between adjacent lines is the
-        // loudest thing a layout can get wrong.
-        subView.setTypeface(Typeface.MONOSPACE);
-        subView.setLetterSpacing(0.16f);
-        subView.setPadding(0, dp(6), 0, 0);
-        headings.addView(subView);
-
-        header.addView(headings, new LinearLayout.LayoutParams(0,
+        titleView.setLetterSpacing(0.06f);
+        header.addView(titleView, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        addChip = buildChip("+  Add station", v -> showStationDialog(null));
+        addChip = buildChip("+ ADD STATION", v -> showStationDialog(null));
         header.addView(addChip, headerChipLp());
 
         themeChip = buildChip("", v -> cycleThemeMode());
-        themeGlyph = new ThemeGlyph(dp(17));
+        themeGlyph = new ThemeGlyph(dp(14));
         themeGlyph.tint(Colors.MUTED);
         themeChip.setCompoundDrawablesWithIntrinsicBounds(themeGlyph, null, null, null);
-        themeChip.setPadding(dp(15), dp(9), dp(15), dp(9));
+        themeChip.setPadding(dp(13), dp(7), dp(13), dp(7));
         header.addView(themeChip, headerChipLp());
 
-        sleepChip = buildChip("☾  6h", v -> showSleepDialog());
+        npChip = buildChip("NP", v -> toggleNpMinimal());
+        header.addView(npChip, headerChipLp());
+
+        sleepChip = buildChip("SLEEP 6H", v -> showSleepDialog());
         header.addView(sleepChip, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -476,6 +492,7 @@ public class MainActivity extends Activity {
         stationsPanel.addView(header, headerLp);
         updateSleepChip();
         updateThemeChip();
+        updateNpChip();
 
         // Masthead separator as a newspaper double rule — a heavy line, a gap,
         // then a hairline. One 2dp band of full-saturation accent was heavier
@@ -491,27 +508,20 @@ public class MainActivity extends Activity {
         hairLp.topMargin = dp(3);
         stationsPanel.addView(hairRule, hairLp);
 
-        // Column header: the list reads as a table rather than a stack of
-        // slabs, and the number/status columns get somewhere to belong.
-        LinearLayout colHead = new LinearLayout(this);
-        colHead.setOrientation(LinearLayout.HORIZONTAL);
-        colHead.setPadding(dp(14), dp(12), dp(14), dp(10));
-        colNum = columnLabel("NO.");
-        colName = columnLabel("STATION");
-        colStatus = columnLabel("STATUS");
-        colStatus.setGravity(Gravity.END);
-        colHead.addView(colNum, new LinearLayout.LayoutParams(dp(56),
-                ViewGroup.LayoutParams.WRAP_CONTENT));
-        colHead.addView(colName, new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        colHead.addView(colStatus, new LinearLayout.LayoutParams(dp(140),
-                ViewGroup.LayoutParams.WRAP_CONTENT));
-        stationsPanel.addView(colHead, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        // The list and the now-playing panel share the width two to one. Both
+        // live in this row so the panel is full height beside the list rather
+        // than a card stranded under it.
+        bodyRow = new LinearLayout(this);
+        bodyRow.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams bodyLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
+        bodyLp.topMargin = dp(18);
+        stationsPanel.addView(bodyRow, bodyLp);
 
-        headRule = new View(this);
-        stationsPanel.addView(headRule, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(1)));
+        listColumn = new LinearLayout(this);
+        listColumn.setOrientation(LinearLayout.VERTICAL);
+        bodyRow.addView(listColumn, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.MATCH_PARENT, 2f));
 
         stationsListView = new ListView(this);
         stationsListView.setBackgroundColor(Colors.BG);
@@ -526,10 +536,8 @@ public class MainActivity extends Activity {
             return true;
         });
 
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
-        lp.topMargin = dp(8);
-        stationsPanel.addView(stationsListView, lp);
+        listColumn.addView(stationsListView, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
 
         // First run lands here rather than on an open dialog with the keyboard
         // up: nothing has been read yet at that point, and a modal is a poor
@@ -537,72 +545,35 @@ public class MainActivity extends Activity {
         // this line whenever it's empty, and focus goes to the Add chip so OK
         // still starts a station in one press.
         emptyView = new TextView(this);
-        emptyView.setText("NO STATIONS\n\nPress  +  Add station  to begin");
+        emptyView.setText("NO STATIONS\n\nPress  + ADD STATION  to begin");
         emptyView.setTextSize(13);
         emptyView.setLineSpacing(dp(3), 1f);
         emptyView.setTypeface(Typeface.MONOSPACE);
         emptyView.setLetterSpacing(0.14f);
         emptyView.setGravity(Gravity.CENTER_HORIZONTAL);
         emptyView.setPadding(0, dp(52), 0, 0);
-        LinearLayout.LayoutParams emptyLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
-        emptyLp.topMargin = dp(8);
-        stationsPanel.addView(emptyView, emptyLp);
+        listColumn.addView(emptyView, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
         stationsListView.setEmptyView(emptyView);
 
-        // --- now-playing card -------------------------------------------
-        LinearLayout npCard = new LinearLayout(this);
-        npCard.setOrientation(LinearLayout.HORIZONTAL);
-        npCard.setGravity(Gravity.CENTER_VERTICAL);
+        // --- now-playing panel (right column) -----------------------------
+        npPanel = new LinearLayout(this);
+        npPanel.setOrientation(LinearLayout.VERTICAL);
         npBgDrawable = new GradientDrawable();
-        npBgDrawable.setColor(Color.rgb(24, 21, 19));
-        npBgDrawable.setCornerRadius(dp(8));
-        npBgDrawable.setStroke(dp(1), Color.argb(70, 243, 239, 230));
-        npCard.setBackground(npBgDrawable);
-        npCard.setPadding(dp(14), dp(12), dp(18), dp(12));
+        npBgDrawable.setColor(Color.TRANSPARENT);
+        npBgDrawable.setStroke(dp(1), Color.argb(45, 243, 239, 230));
+        npPanel.setBackground(npBgDrawable);
+        npPanel.setPadding(dp(20), dp(20), dp(20), dp(20));
+        LinearLayout.LayoutParams npPanelLp = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.MATCH_PARENT, 1f);
+        npPanelLp.leftMargin = dp(32);
+        bodyRow.addView(npPanel, npPanelLp);
 
-        // Album art — a placeholder square until the first cover lands.
-        npArt = new android.widget.ImageView(this);
-        npArt.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
-        artBgDrawable = new GradientDrawable();
-        artBgDrawable.setColor(Color.rgb(34, 30, 27));
-        artBgDrawable.setCornerRadius(dp(4));
-        artBgDrawable.setStroke(dp(1), Color.argb(60, 243, 239, 230));
-        npArt.setBackground(artBgDrawable);
-        npArt.setClipToOutline(true);
-        LinearLayout.LayoutParams artLp = new LinearLayout.LayoutParams(dp(62), dp(62));
-        artLp.rightMargin = dp(16);
-        npCard.addView(npArt, artLp);
-
-        playButton = new android.widget.Button(this);
-        playButton.setText("▶");
-        playButton.setTextSize(20);
-        playButton.setAllCaps(false);
-        playButton.setTextColor(Colors.INK);
-        playButton.setMinWidth(0);
-        playButton.setMinimumWidth(0);
-        playButton.setMinHeight(0);
-        playButton.setMinimumHeight(0);
-        playButton.setPadding(dp(18), dp(6), dp(18), dp(8));
-        playBgDrawable = new GradientDrawable();
-        playBgDrawable.setColor(Color.argb(80, 197, 48, 42));
-        playBgDrawable.setCornerRadius(dp(28));
-        playBgDrawable.setStroke(dp(1), Colors.VERMILION);
-        playButton.setBackground(playBgDrawable);
-        playButton.setOnFocusChangeListener((v, has) -> stylePlayButton(has));
-        playButton.setOnClickListener(v -> togglePlayFromList());
-        LinearLayout.LayoutParams pbLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        pbLp.rightMargin = dp(18);
-        npCard.addView(playButton, pbLp);
-
-        LinearLayout npText = new LinearLayout(this);
-        npText.setOrientation(LinearLayout.VERTICAL);
-
-        // Label row: a softly pulsing on-air lamp beside the status caption.
+        // 1. Caption row: the pulsing lamp beside NOW PLAYING, over a hairline.
         LinearLayout labelRow = new LinearLayout(this);
         labelRow.setOrientation(LinearLayout.HORIZONTAL);
         labelRow.setGravity(Gravity.CENTER_VERTICAL);
+        labelRow.setPadding(0, 0, 0, dp(10));
 
         onAirDot = new View(this);
         GradientDrawable dot = new GradientDrawable();
@@ -610,7 +581,7 @@ public class MainActivity extends Activity {
         dot.setColor(Colors.VERMILION);
         onAirDot.setBackground(dot);
         onAirDot.setVisibility(View.INVISIBLE);
-        LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(dp(7), dp(7));
+        LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(dp(5), dp(5));
         dotLp.rightMargin = dp(7);
         labelRow.addView(onAirDot, dotLp);
 
@@ -622,55 +593,234 @@ public class MainActivity extends Activity {
         npLabel = new TextView(this);
         npLabel.setText("NOW PLAYING");
         npLabel.setTextColor(Colors.VERMILION);
-        npLabel.setTextSize(9);
+        npLabel.setTextSize(8);
         npLabel.setTypeface(Typeface.MONOSPACE);
-        npLabel.setLetterSpacing(0.3f);
+        npLabel.setLetterSpacing(0.32f);
         labelRow.addView(npLabel);
-        npText.addView(labelRow);
+        npPanel.addView(labelRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        npCaptionRule = new View(this);
+        npPanel.addView(npCaptionRule, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(1)));
+
+        // 2. Show/DJ, when the station's API names one. GONE otherwise — see
+        //    the poller; nothing here is scraped off the page to fill it in.
+        LinearLayout showRow = new LinearLayout(this);
+        showRow.setOrientation(LinearLayout.HORIZONTAL);
+        showRow.setGravity(Gravity.CENTER_VERTICAL);
+        showRow.setVisibility(View.GONE);
+        npShowRow = showRow;
+
+        android.widget.ImageView mic = new android.widget.ImageView(this);
+        micGlyph = new MicGlyph(dp(12));
+        mic.setImageDrawable(micGlyph);
+        LinearLayout.LayoutParams micLp = new LinearLayout.LayoutParams(dp(12), dp(12));
+        micLp.rightMargin = dp(7);
+        showRow.addView(mic, micLp);
+
+        npShowName = new TextView(this);
+        npShowName.setTextSize(8);
+        npShowName.setTypeface(Typeface.MONOSPACE);
+        npShowName.setLetterSpacing(0.18f);
+        npShowName.setSingleLine(true);
+        npShowName.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        showRow.addView(npShowName);
+
+        LinearLayout.LayoutParams showLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        showLp.topMargin = dp(12);
+        npPanel.addView(showRow, showLp);
+
+        // 3. Cover art: a centred square, empty until the first cover lands.
+        npArt = new android.widget.ImageView(this);
+        npArt.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+        artBgDrawable = new GradientDrawable();
+        artBgDrawable.setColor(Color.rgb(34, 30, 27));
+        artBgDrawable.setStroke(dp(1), Color.argb(38, 243, 239, 230));
+        npArt.setBackground(artBgDrawable);
+        npArt.setClipToOutline(true);
+        LinearLayout.LayoutParams artLp = new LinearLayout.LayoutParams(dp(150), dp(150));
+        artLp.gravity = Gravity.CENTER_HORIZONTAL;
+        artLp.topMargin = dp(12);
+        npPanel.addView(npArt, artLp);
+
+        // 4. Title block.
         nowPlayingText = new TextView(this);
         nowPlayingText.setText("nothing tuned yet");
         nowPlayingText.setTextColor(Colors.INK);
-        nowPlayingText.setTextSize(18);
+        nowPlayingText.setTextSize(14);
         nowPlayingText.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
         nowPlayingText.setSingleLine(true);
         nowPlayingText.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        nowPlayingText.setPadding(0, dp(2), 0, 0);
-        npText.addView(nowPlayingText);
+        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        titleLp.topMargin = dp(11);
+        npPanel.addView(nowPlayingText, titleLp);
 
-        npMeta = new TextView(this);
-        npMeta.setText("pick a station above to tune in");
-        npMeta.setTextColor(Colors.MUTED);
-        npMeta.setTextSize(12);
-        npMeta.setTypeface(Typeface.MONOSPACE);
-        npMeta.setSingleLine(true);
-        npMeta.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        npMeta.setPadding(0, dp(3), 0, 0);
-        npText.addView(npMeta);
+        npArtist = new TextView(this);
+        npArtist.setText("pick a station to tune in");
+        npArtist.setTextColor(Colors.MUTED);
+        npArtist.setTextSize(10);
+        npArtist.setTypeface(Typeface.MONOSPACE);
+        npArtist.setSingleLine(true);
+        npArtist.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        npArtist.setPadding(0, dp(3), 0, 0);
+        npPanel.addView(npArtist);
 
-        npCard.addView(npText, new LinearLayout.LayoutParams(0,
+        npAlbum = new TextView(this);
+        npAlbum.setTextSize(8);
+        npAlbum.setTypeface(Typeface.MONOSPACE);
+        npAlbum.setSingleLine(true);
+        npAlbum.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        npAlbum.setPadding(0, dp(3), 0, 0);
+        npPanel.addView(npAlbum);
+
+        // 5. Everything below is pinned to the bottom of the panel.
+        View spacer = new View(this);
+        npPanel.addView(spacer, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        npFootRule = new View(this);
+        npPanel.addView(npFootRule, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(1)));
+
+        // 6. Foot: transport, what it is playing, and the level meter.
+        LinearLayout footRow = new LinearLayout(this);
+        footRow.setOrientation(LinearLayout.HORIZONTAL);
+        footRow.setGravity(Gravity.CENTER_VERTICAL);
+        footRow.setPadding(0, dp(13), 0, 0);
+
+        playButton = buildPlayButton(dp(35), 14f);
+        LinearLayout.LayoutParams pbLp = new LinearLayout.LayoutParams(dp(35), dp(35));
+        pbLp.rightMargin = dp(12);
+        footRow.addView(playButton, pbLp);
+
+        LinearLayout footText = new LinearLayout(this);
+        footText.setOrientation(LinearLayout.VERTICAL);
+
+        npStation = new TextView(this);
+        npStation.setTextSize(8);
+        npStation.setTypeface(Typeface.MONOSPACE);
+        npStation.setLetterSpacing(0.1f);
+        npStation.setSingleLine(true);
+        npStation.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        footText.addView(npStation);
+
+        npStatus = new TextView(this);
+        npStatus.setTextSize(8);
+        npStatus.setTypeface(Typeface.MONOSPACE);
+        npStatus.setSingleLine(true);
+        npStatus.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        footText.addView(npStatus);
+
+        footRow.addView(footText, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
+        panelMeter = new LevelMeter(this, dp(3), dp(3));
+        footRow.addView(panelMeter,
+                new LinearLayout.LayoutParams(panelMeter.intrinsicWidth(), dp(24)));
+
+        npPanel.addView(footRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // --- minimal mode strip (replaces the panel when NP is off) --------
+        stripRule = new View(this);
+        LinearLayout.LayoutParams stripRuleLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(1));
+        stripRuleLp.topMargin = dp(14);
+        stationsPanel.addView(stripRule, stripRuleLp);
+
+        minimalStrip = new LinearLayout(this);
+        minimalStrip.setOrientation(LinearLayout.HORIZONTAL);
+        minimalStrip.setGravity(Gravity.CENTER_VERTICAL);
+        minimalStrip.setPadding(0, dp(14), 0, 0);
+
+        stripArt = new android.widget.ImageView(this);
+        stripArt.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+        stripArtBg = new GradientDrawable();
+        stripArtBg.setColor(Color.rgb(34, 30, 27));
+        stripArtBg.setStroke(dp(1), Color.argb(38, 243, 239, 230));
+        stripArt.setBackground(stripArtBg);
+        stripArt.setClipToOutline(true);
+        LinearLayout.LayoutParams stripArtLp = new LinearLayout.LayoutParams(dp(68), dp(68));
+        stripArtLp.rightMargin = dp(16);
+        minimalStrip.addView(stripArt, stripArtLp);
+
+        stripPlay = buildPlayButton(dp(46), 19f);
+        LinearLayout.LayoutParams spLp = new LinearLayout.LayoutParams(dp(46), dp(46));
+        spLp.rightMargin = dp(16);
+        minimalStrip.addView(stripPlay, spLp);
+
+        LinearLayout stripText = new LinearLayout(this);
+        stripText.setOrientation(LinearLayout.VERTICAL);
+
+        stripCaption = new TextView(this);
+        stripCaption.setText("NOW PLAYING");
+        stripCaption.setTextSize(9);
+        stripCaption.setTypeface(Typeface.MONOSPACE);
+        stripCaption.setLetterSpacing(0.28f);
+        stripCaption.setSingleLine(true);
+        stripCaption.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        stripText.addView(stripCaption);
+
+        stripTrack = new TextView(this);
+        stripTrack.setText("nothing tuned yet");
+        stripTrack.setTextSize(19);
+        stripTrack.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+        stripTrack.setSingleLine(true);
+        stripTrack.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        stripTrack.setPadding(0, dp(2), 0, 0);
+        stripText.addView(stripTrack);
+
+        minimalStrip.addView(stripText, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        stripMeter = new LevelMeter(this, dp(3), dp(3));
+        LinearLayout.LayoutParams smLp =
+                new LinearLayout.LayoutParams(stripMeter.intrinsicWidth(), dp(24));
+        smLp.leftMargin = dp(16);
+        minimalStrip.addView(stripMeter, smLp);
+
+        stationsPanel.addView(minimalStrip, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // --- footer -------------------------------------------------------
         npRule = new View(this);
         LinearLayout.LayoutParams npRuleLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(1));
-        npRuleLp.topMargin = dp(10);
+        npRuleLp.topMargin = dp(16);
         stationsPanel.addView(npRule, npRuleLp);
 
-        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        cardLp.topMargin = dp(4);
-        stationsPanel.addView(npCard, cardLp);
+        LinearLayout footer = new LinearLayout(this);
+        footer.setOrientation(LinearLayout.HORIZONTAL);
+        footer.setGravity(Gravity.CENTER_VERTICAL);
+        footer.setPadding(0, dp(9), 0, 0);
 
-        noteView = new TextView(this);
-        noteView.setText("an unofficial community player for Subwave stations   ·   " + appVersion());
-        noteView.setTextColor(Color.argb(115, 150, 145, 135));
-        noteView.setTextSize(10);
-        noteView.setTypeface(Typeface.MONOSPACE);
-        noteView.setGravity(Gravity.CENTER_HORIZONTAL);
-        noteView.setPadding(0, dp(10), 0, 0);
-        stationsPanel.addView(noteView);
+        noteView = footLabel("an unofficial community player for Subwave stations", 0f);
+        footer.addView(noteView, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
+        // The legend the masthead used to carry. Centre it by giving the two
+        // ends equal weight rather than by measuring anything.
+        //
+        // It no longer promises MENU. The Google TV Streamer's remote has no
+        // menu button at all, so a legend naming it was instructions for a key
+        // a viewer may not own — and everything that menu offers on this screen
+        // is on a chip or on BACK anyway.
+        footHint = footLabel("OK TUNE IN · HOLD OK FOR OPTIONS · BACK TWICE TO EXIT", 0.14f);
+        footer.addView(footHint, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        footVersion = footLabel(appVersion(), 0f);
+        footVersion.setGravity(Gravity.END);
+        footer.addView(footVersion, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        stationsPanel.addView(footer, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        applyNpMinimal();
         stationsPanel.setVisibility(View.GONE);
         root.addView(stationsPanel, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
@@ -687,21 +837,126 @@ public class MainActivity extends Activity {
     /* Station colour scheme                                               */
     /* ------------------------------------------------------------------ */
 
-    private void stylePlayButton(boolean focused) {
-        if (playBgDrawable == null) return;
-        playBgDrawable.setColor(focused ? palette.accent : Colors.withAlpha(palette.accent, 80));
-        playBgDrawable.setStroke(dp(1), palette.accent);
-        playButton.setTextColor(focused ? palette.onAccent : palette.ink);
+    /**
+     * A square transport button. There are two — one in the now-playing panel,
+     * one in the minimal strip — and only ever one on screen, but both are
+     * built up front so toggling minimal mode never has to re-parent a focused
+     * view. The base glyph size rides along on the tag so the pause mark, which
+     * is wider than the play mark, can step down without a table of sizes.
+     */
+    private android.widget.Button buildPlayButton(int sizePx, float glyphSp) {
+        final android.widget.Button b = new android.widget.Button(this);
+        b.setText("▶");
+        b.setTextSize(glyphSp);
+        b.setTag(glyphSp);
+        b.setAllCaps(false);
+        b.setTextColor(Colors.INK);
+        b.setMinWidth(0);
+        b.setMinimumWidth(0);
+        b.setMinHeight(0);
+        b.setMinimumHeight(0);
+        b.setPadding(0, 0, 0, 0);
+        b.setGravity(Gravity.CENTER);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Colors.withAlpha(Colors.VERMILION, 56));
+        bg.setStroke(dp(2), Colors.VERMILION);
+        b.setBackground(bg);
+        b.setOnFocusChangeListener((v, has) -> stylePlayButton(b, has));
+        b.setOnClickListener(v -> togglePlayFromList());
+        playButtons.add(b);
+        playBgs.put(b, bg);
+        return b;
+    }
+
+    private void stylePlayButton(android.widget.Button b, boolean focused) {
+        GradientDrawable bg = playBgs.get(b);
+        if (bg == null) return;
+        bg.setColor(focused ? palette.accent : Colors.withAlpha(palette.accent, 56));
+        bg.setStroke(dp(2), palette.accent);
+        b.setTextColor(focused ? palette.onAccent : palette.ink);
+    }
+
+    private void stylePlayButtons() {
+        for (android.widget.Button b : playButtons) stylePlayButton(b, b.hasFocus());
+    }
+
+    /** One of the three footer captions: small, quiet, monospace. */
+    private TextView footLabel(String text, float letterSpacing) {
+        TextView t = new TextView(this);
+        t.setText(text);
+        t.setTextSize(7);
+        t.setTypeface(Typeface.MONOSPACE);
+        t.setTextColor(Colors.withAlpha(Colors.MUTED, 150));
+        if (letterSpacing > 0) t.setLetterSpacing(letterSpacing);
+        t.setSingleLine(true);
+        t.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        return t;
+    }
+
+    /* ---- minimal mode ------------------------------------------------- */
+
+    private boolean npMinimal() {
+        return prefs().getBoolean(KEY_NP_MINIMAL, false);
+    }
+
+    private void toggleNpMinimal() {
+        prefs().edit().putBoolean(KEY_NP_MINIMAL, !npMinimal()).apply();
+        updateNpChip();
+        applyNpMinimal();
+    }
+
+    private void updateNpChip() {
+        if (npChip == null) return;
+        boolean min = npMinimal();
+        npChip.setContentDescription(min
+                ? "Now playing: compact. Press to show the full panel"
+                : "Now playing: full panel. Press to shrink it to a strip");
+        // The chip reads as the state it is IN, not the state it would go to:
+        // a control that labels its own future is the one people press twice.
+        npChip.setAlpha(min ? 0.55f : 1f);
+    }
+
+    /**
+     * Swap between the full right-hand panel and the one-line strip. Focus is
+     * moved off whatever is about to be hidden — a focused View that goes GONE
+     * hands focus back to the top of the window, which on this screen means the
+     * viewer's place in the station list is lost.
+     */
+    private void applyNpMinimal() {
+        if (npPanel == null) return;
+        boolean min = npMinimal();
+        if (min && (npPanel.hasFocus() || playButton.hasFocus())
+                || !min && minimalStrip.hasFocus()) {
+            // An empty ListView cannot take focus, so on a first run with no
+            // stations this would otherwise leave the remote with nowhere to go.
+            if (stations.isEmpty()) npChip.requestFocus();
+            else stationsListView.requestFocus();
+        }
+        npPanel.setVisibility(min ? View.GONE : View.VISIBLE);
+        minimalStrip.setVisibility(min ? View.VISIBLE : View.GONE);
+        stripRule.setVisibility(min ? View.VISIBLE : View.GONE);
+        // Nothing hidden should be animating.
+        if (panelMeter != null) panelMeter.setRunning(!min && audioLive);
+        if (stripMeter != null) stripMeter.setRunning(min && audioLive);
+    }
+
+    /** Start or stop whichever meter is currently on screen. */
+    private void setMetersRunning(boolean running) {
+        boolean min = npMinimal();
+        if (panelMeter != null) panelMeter.setRunning(running && !min);
+        if (stripMeter != null) stripMeter.setRunning(running && min);
     }
 
     /** The views of one list row, held so a rebind doesn't rebuild them. */
     private static class Row {
         final LinearLayout view;
         final TextView num, name, status;
-        Row(LinearLayout view, TextView num, TextView name, TextView status) {
+        final View dot;
+        Row(LinearLayout view, TextView num, TextView name, View dot, TextView status) {
             this.view = view;
             this.num = num;
             this.name = name;
+            this.dot = dot;
             this.status = status;
         }
     }
@@ -711,33 +966,49 @@ public class MainActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(14), dp(15), dp(14), dp(15));
+        row.setPadding(dp(6), dp(13), dp(6), dp(13));
 
         TextView num = new TextView(this);
-        num.setTextSize(15);
+        num.setTextSize(10);
         num.setTypeface(Typeface.MONOSPACE);
-        row.addView(num, new LinearLayout.LayoutParams(dp(56),
+        row.addView(num, new LinearLayout.LayoutParams(dp(36),
                 ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView name = new TextView(this);
-        name.setTextSize(20);
+        name.setTextSize(15);
         name.setSingleLine(true);
         name.setEllipsize(android.text.TextUtils.TruncateAt.END);
         name.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
         row.addView(name, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        // Status as its own column in small letterspaced caps, rather than
-        // appended to the name at the same weight.
+        // Status carries as little as it can: a live station is a green lamp
+        // and nothing else, because "ON AIR" on every row of a list of on-air
+        // stations is a column of noise. Only the one you are tuned to earns a
+        // word, and only a station that ISN'T answering earns a sentence.
+        // Caption first, lamp last, both hugging the right edge. The lamp is
+        // the thing being scanned down the list from across a room, so it holds
+        // one vertical line whether or not the row beside it says anything —
+        // which a fixed-width status column with the lamp inside it would not.
         TextView status = new TextView(this);
-        status.setTextSize(10);
+        status.setTextSize(8);
         status.setTypeface(Typeface.MONOSPACE);
-        status.setLetterSpacing(0.22f);
+        status.setLetterSpacing(0.2f);
         status.setGravity(Gravity.END);
-        row.addView(status, new LinearLayout.LayoutParams(dp(140),
-                ViewGroup.LayoutParams.WRAP_CONTENT));
+        status.setSingleLine(true);
+        row.addView(status, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        Row r = new Row(row, num, name, status);
+        View dot = new View(this);
+        GradientDrawable d = new GradientDrawable();
+        d.setShape(GradientDrawable.OVAL);
+        d.setColor(ON_AIR_GREEN);
+        dot.setBackground(d);
+        LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(dp(5), dp(5));
+        dotLp.leftMargin = dp(9);
+        row.addView(dot, dotLp);
+
+        Row r = new Row(row, num, name, dot, status);
         row.setTag(r);
         return r;
     }
@@ -765,7 +1036,7 @@ public class MainActivity extends Activity {
             boolean offline = unreachable.contains(st.url);
 
             r.num.setText(String.format(Locale.US, "%02d", position + 1));
-            r.num.setTextColor(Colors.withAlpha(palette.muted, 190));
+            r.num.setTextColor(playing ? tunedInk() : Colors.withAlpha(palette.muted, 140));
 
             // Deliberately name-only: a private station's address is a secret
             // worth keeping, and this screen is the one most likely to end up
@@ -773,21 +1044,33 @@ public class MainActivity extends Activity {
             r.name.setText(st.name);
             r.name.setTextColor(offline ? palette.muted : palette.ink);
 
-            r.status.setText(playing ? "ON AIR" : (offline ? "NOT RESPONDING" : ""));
-            r.status.setTextColor(playing ? palette.accentText : palette.muted);
+            // INVISIBLE, not GONE: the lamp keeps its space so OFF AIR lands in
+            // the same column as TUNED instead of jumping 14dp to the right.
+            r.dot.setVisibility(offline ? View.INVISIBLE : View.VISIBLE);
+            r.status.setText(offline ? "OFF AIR" : (playing ? "TUNED" : ""));
+            // Off air stays at full `muted` rather than something dimmer: it is
+            // the row someone is squinting at from ten feet away to work out
+            // why their station is missing.
+            r.status.setTextColor(offline ? palette.muted : tunedInk());
             return r.view;
         }
     }
 
-    /** A column heading: small, letterspaced, quiet. */
-    private TextView columnLabel(String text) {
-        TextView t = new TextView(this);
-        t.setText(text);
-        t.setTextColor(Colors.MUTED);
-        t.setTextSize(9);
-        t.setTypeface(Typeface.MONOSPACE);
-        t.setLetterSpacing(0.3f);
-        return t;
+    /**
+     * The lamp on a station that is answering. A literal green, and the only
+     * one in the app: it is the single piece of colour here that means a fact
+     * about the world rather than a brand, and a station's accent — which this
+     * would otherwise be drawn from — is just as likely to be red.
+     */
+    private static final int ON_AIR_GREEN = Color.rgb(63, 174, 106);
+
+    /**
+     * The accent as it reads on the tuned row: the legible accent walked most
+     * of the way to the ink, so it says "this one" without competing with the
+     * station names it sits beside.
+     */
+    private int tunedInk() {
+        return Colors.blend(palette.accentText, palette.ink, 0.6f);
     }
 
     /**
@@ -805,9 +1088,11 @@ public class MainActivity extends Activity {
         edge.setColor(palette.accent);
 
         GradientDrawable panel = new GradientDrawable();
-        panel.setColor(Colors.blend(palette.bg, palette.accent, 0.17f));
-        float r = dp(3);
-        panel.setCornerRadii(new float[]{0, 0, r, r, r, r, 0, 0});
+        // The spec's accent-at-alpha-36, but composited against the background
+        // here rather than left translucent: this layer sits ON TOP of the
+        // solid accent edge, so a see-through fill would let the full-strength
+        // accent bleed across the whole row instead of just the rule.
+        panel.setColor(Colors.blend(palette.bg, palette.accent, 36 / 255f));
 
         android.graphics.drawable.LayerDrawable sel =
                 new android.graphics.drawable.LayerDrawable(
@@ -828,40 +1113,63 @@ public class MainActivity extends Activity {
         stationsListView.setBackgroundColor(palette.bg);
 
         titleView.setTextColor(palette.ink);
-        subView.setTextColor(Colors.withAlpha(palette.muted, 200));
         accentRule.setBackgroundColor(palette.accent);
-        noteView.setTextColor(Colors.withAlpha(palette.muted, 150));
         if (emptyView != null) emptyView.setTextColor(palette.muted);
-        if (hairRule != null) hairRule.setBackgroundColor(Colors.withAlpha(palette.ink, 45));
-        if (headRule != null) headRule.setBackgroundColor(Colors.withAlpha(palette.ink, 45));
-        if (npRule != null) npRule.setBackgroundColor(Colors.withAlpha(palette.ink, 45));
-        int colInk = Colors.withAlpha(palette.muted, 175);
-        if (colNum != null) colNum.setTextColor(colInk);
-        if (colName != null) colName.setTextColor(colInk);
-        if (colStatus != null) colStatus.setTextColor(colInk);
+
+        // Every hairline on the screen comes off the ink, never a literal —
+        // hardcoding the dark scheme's near-white here is what used to make the
+        // light theme's rules invisible.
+        int hair = Colors.withAlpha(palette.ink, 45);
+        if (hairRule != null) hairRule.setBackgroundColor(hair);
+        if (npRule != null) npRule.setBackgroundColor(hair);
+        if (stripRule != null) stripRule.setBackgroundColor(hair);
+        if (npCaptionRule != null) {
+            npCaptionRule.setBackgroundColor(Colors.withAlpha(palette.ink, 35));
+        }
+        if (npFootRule != null) npFootRule.setBackgroundColor(Colors.withAlpha(palette.ink, 35));
+        int footInk = Colors.withAlpha(palette.muted, 150);
+        if (noteView != null) noteView.setTextColor(footInk);
+        if (footHint != null) footHint.setTextColor(footInk);
+        if (footVersion != null) footVersion.setTextColor(footInk);
         if (themeGlyph != null) themeGlyph.tint(
                 themeChip.hasFocus() ? palette.ink : palette.muted);
 
-        // A footer section under a rule, not a floating bordered box: the
-        // stroke competed with the list's own rules for the same job.
+        // The panel is an outline over the page, not a filled card.
         npBgDrawable.setColor(Color.TRANSPARENT);
-        npBgDrawable.setStroke(0, Color.TRANSPARENT);
-        artBgDrawable.setColor(Colors.withAlpha(palette.ink, 26));
-        artBgDrawable.setStroke(dp(1), Colors.withAlpha(palette.ink, 60));
+        npBgDrawable.setStroke(dp(1), Colors.withAlpha(palette.ink, 45));
+        int artFill = palette.surface;
+        int artStroke = Colors.withAlpha(palette.ink, 38);
+        artBgDrawable.setColor(artFill);
+        artBgDrawable.setStroke(dp(1), artStroke);
+        if (stripArtBg != null) {
+            stripArtBg.setColor(artFill);
+            stripArtBg.setStroke(dp(1), artStroke);
+        }
 
         npLabel.setTextColor(palette.accentText);
         nowPlayingText.setTextColor(currentUrl == null ? palette.muted : palette.ink);
-        npMeta.setTextColor(palette.muted);
+        npArtist.setTextColor(palette.muted);
+        npAlbum.setTextColor(Colors.withAlpha(palette.muted, 153)); // 60%
+        npStation.setTextColor(Colors.blend(palette.ink, palette.muted, 0.5f));
+        npStatus.setTextColor(palette.muted);
+        if (npShowName != null) npShowName.setTextColor(tunedInk());
+        if (micGlyph != null) micGlyph.tint(palette.accentText);
+        if (stripCaption != null) stripCaption.setTextColor(palette.accentText);
+        if (stripTrack != null) {
+            stripTrack.setTextColor(currentUrl == null ? palette.muted : palette.ink);
+        }
+        if (panelMeter != null) panelMeter.tint(palette.accent);
+        if (stripMeter != null) stripMeter.tint(palette.accent);
         ((GradientDrawable) onAirDot.getBackground()).setColor(palette.accent);
 
-        stylePlayButton(playButton.hasFocus());
+        stylePlayButtons();
         for (android.widget.Button c : chips) styleChip(c, c.hasFocus());
     }
 
     /** The row-level colours, applied once rather than per animation frame. */
     private void applyPaletteToRows() {
         stationsListView.setDivider(new android.graphics.drawable.ColorDrawable(
-                Colors.withAlpha(palette.ink, 22)));
+                Colors.withAlpha(palette.ink, 30)));
         stationsListView.setDividerHeight(dp(1));
         stationsListView.setSelector(rowSelector());
         stationsAdapter.notifyDataSetChanged();
@@ -943,6 +1251,7 @@ public class MainActivity extends Activity {
 
     /** Repaint for whichever scheme is selected. */
     private void refreshPalette() {
+        resetPalettePoll(); // an explicit ask deserves a prompt answer
         String m = themeMode();
         if (THEME_DARK.equals(m)) { animateToPalette(Palette.DARK); return; }
         if (THEME_LIGHT.equals(m)) { animateToPalette(Palette.LIGHT); return; }
@@ -950,6 +1259,24 @@ public class MainActivity extends Activity {
     }
 
     private static final long PALETTE_POLL_MS = 6000;
+    private static final long PALETTE_POLL_MAX_MS = 30_000;
+    /**
+     * How long until the next colour reading. Six seconds while the answer is
+     * still moving, easing out to thirty once it has settled.
+     *
+     * The poll can't simply stop: a station re-themes itself when the show
+     * changes, which happens on its own schedule with no signal to us. But a
+     * show runs for an hour, so re-asking every six seconds for the whole of it
+     * is a JavaScript round trip into the WebView six hundred times to learn
+     * nothing. Backing off keeps the same worst case — a theme change is picked
+     * up within half a minute — for a fraction of the work.
+     */
+    private long palettePollMs = PALETTE_POLL_MS;
+
+    /** Back to a fast cadence: something happened that could change the answer. */
+    private void resetPalettePoll() {
+        palettePollMs = PALETTE_POLL_MS;
+    }
 
     /**
      * Keeps re-sampling the loaded page's colours for as long as it's on
@@ -965,7 +1292,7 @@ public class MainActivity extends Activity {
             if (pageLoaded && currentUrl != null && THEME_STATION.equals(themeMode())) {
                 fetchStationPalette();
             }
-            ui.postDelayed(this, PALETTE_POLL_MS);
+            ui.postDelayed(this, palettePollMs);
         }
     };
 
@@ -1006,7 +1333,15 @@ public class MainActivity extends Activity {
                 "return o.join('|');}catch(e){return '';}})()";
         js(probe, r -> {
             Palette p = Palette.fromTokens(r);
-            if (p != null) animateToPalette(p);
+            if (p == null) return;
+            // Ease off while the answer keeps coming back the same, and snap
+            // back to a fast cadence the moment it doesn't.
+            if (p.matches(palette)) {
+                palettePollMs = Math.min(palettePollMs * 2, PALETTE_POLL_MAX_MS);
+            } else {
+                resetPalettePoll();
+            }
+            animateToPalette(p);
         });
     }
 
@@ -1015,78 +1350,206 @@ public class MainActivity extends Activity {
     /* Now-playing poller (station list footer)                            */
     /* ------------------------------------------------------------------ */
 
+    /**
+     * What one now-playing reading contains. A small carrier so the parse can
+     * happen off the UI thread and the painting can happen on it, without a
+     * fistful of finals crossing the boundary.
+     */
+    private static class NowPlaying {
+        String title, artist, album, year, coverId, show, bitrate;
+    }
+
+    /**
+     * How long until the next reading. Seven seconds while a station is
+     * answering; doubling to a minute while it isn't.
+     *
+     * A station that has gone away is the case worth being careful about: it is
+     * the one that costs a full connect timeout every time, and it is exactly
+     * when nothing is changing. Backing off means a TV left on the picker
+     * overnight against a switched-off LAN station makes about a hundred
+     * requests instead of twelve thousand, and still recovers within a minute
+     * of the station coming back.
+     */
+    private long npDelayMs = NOW_PLAYING_POLL_MS;
+    private static final long NOW_PLAYING_POLL_MAX_MS = 60_000;
+
+    private void npPollSucceeded() {
+        npDelayMs = NOW_PLAYING_POLL_MS;
+    }
+
+    private void npPollFailed() {
+        npDelayMs = Math.min(npDelayMs * 2, NOW_PLAYING_POLL_MAX_MS);
+    }
+
     private final Runnable nowPlayingPoll = new Runnable() {
         @Override
         public void run() {
             if (!stationsVisible()) return;
             if (currentUrl == null) {
-                npLabel.setText("NOT TUNED");
-                nowPlayingText.setText("nothing tuned yet");
-                nowPlayingText.setTextColor(palette.muted);
-                npMeta.setText("pick a station above to tune in");
-                setPlayGlyph(false);
-                setOnAir(false);
-                setCover(null);
+                showNothingTuned();
             } else {
                 // Ask the page whether audio is actually rolling.
                 syncPlaybackState();
                 final String base = currentUrl.endsWith("/") ? currentUrl : currentUrl + "/";
                 offThread(() -> {
-                    String title = null, meta = null, coverId = null;
-                    HttpURLConnection c = null;
-                    try {
-                        c = Http.open(base, "api/now-playing", 4000, store.savedAuth(base));
-                        String body;
-                        try (InputStream in = c.getInputStream()) {
-                            body = Http.readTextCapped(in, Http.MAX_JSON_CHARS);
-                        }
-                        JSONObject o = new JSONObject(body);
-                        JSONObject np = o.optJSONObject("nowPlaying");
-                        JSONObject dj = o.optJSONObject("dj");
-                        int listeners = o.optInt("listeners", -1);
-                        if (np != null) {
-                            title = np.optString("title", "—");
-                            coverId = np.optString("subsonic_id", null);
-                            StringBuilder m = new StringBuilder(np.optString("artist", ""));
-                            String album = np.optString("album", "");
-                            if (!album.isEmpty()) m.append("  ·  ").append(album);
-                            if (dj != null) {
-                                String djName = dj.optString("name", "");
-                                if (!djName.isEmpty()) m.append("  ·  ").append(djName);
-                            }
-                            if (listeners >= 0) m.append("  ·  ").append(listeners)
-                                    .append(listeners == 1 ? " listener" : " listeners");
-                            meta = m.toString();
-                        }
-                    } catch (Exception ignored) {
-                    } finally { Http.close(c); }
-                    final String fTitle = title, fMeta = meta, fCover = coverId;
+                    NowPlaying np = readNowPlaying(base);
                     ui.post(() -> {
                         if (!stationsVisible()) return;
-                        if (fTitle != null) {
-                            npLabel.setText("NOW PLAYING");
-                            nowPlayingText.setText(fTitle);
-                            nowPlayingText.setTextColor(palette.ink);
-                            npMeta.setText(fMeta);
-                            loadCover(base, fCover);
+                        if (np != null) {
+                            npPollSucceeded();
+                            showNowPlaying(base, np);
                         } else {
-                            npLabel.setText("OFF AIR");
-                            nowPlayingText.setText("station not responding");
-                            nowPlayingText.setTextColor(palette.muted);
-                            // Name, not address — same screenshot reasoning as
-                            // the station rows above.
-                            npMeta.setText(currentStationName());
-                            setOnAir(false);
-                            setCover(null);
+                            npPollFailed();
+                            showStationSilent();
                         }
                     });
                 });
             }
-            ui.postDelayed(this, NOW_PLAYING_POLL_MS);
+            ui.postDelayed(this, npDelayMs);
         }
     };
 
-    /** The on-air lamp: a slow alpha breath, only while audio is actually live. */
+    /**
+     * One reading from a station's public now-playing endpoint, or null if it
+     * didn't answer with one.
+     *
+     * Every field is optional and nothing is invented: a station that doesn't
+     * publish a year, a bitrate or a show simply leaves those blank and the
+     * rows that would carry them stay hidden. This is also the only place the
+     * show/DJ line comes from — the page is never scraped for it.
+     */
+    private NowPlaying readNowPlaying(String base) {
+        HttpURLConnection c = null;
+        try {
+            c = Http.open(base, "api/now-playing", 4000, store.savedAuth(base));
+            String body;
+            try (InputStream in = c.getInputStream()) {
+                body = Http.readTextCapped(in, Http.MAX_JSON_CHARS);
+            }
+            JSONObject o = new JSONObject(body);
+            JSONObject track = o.optJSONObject("nowPlaying");
+            if (track == null) return null;
+            NowPlaying np = new NowPlaying();
+            np.title = track.optString("title", "—");
+            np.artist = track.optString("artist", "");
+            np.album = track.optString("album", "");
+            np.year = optText(track, "year");
+            np.coverId = track.optString("subsonic_id", null);
+            np.bitrate = kbps(optText(track, "bitrate"));
+            if (np.bitrate.isEmpty()) np.bitrate = kbps(optText(o, "bitrate"));
+            JSONObject dj = o.optJSONObject("dj");
+            JSONObject show = o.optJSONObject("show");
+            if (dj != null) np.show = dj.optString("name", "");
+            if ((np.show == null || np.show.isEmpty()) && show != null) {
+                np.show = show.optString("name", "");
+            }
+            return np;
+        } catch (Exception ignored) {
+            return null;
+        } finally { Http.close(c); }
+    }
+
+    /**
+     * A bitrate in kbps, whichever unit the station published it in. Some
+     * report 320, some report 320000, and the label says "kbps" either way —
+     * so the one thing not to do is print the number unread.
+     */
+    private static String kbps(String raw) {
+        if (raw.isEmpty()) return "";
+        try {
+            long v = Long.parseLong(raw.replaceAll("[^0-9]", ""));
+            if (v >= 1000) v /= 1000;
+            return v > 0 ? String.valueOf(v) : "";
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** A JSON field as trimmed text whether the station sent it as a string or a number. */
+    private static String optText(JSONObject o, String key) {
+        Object v = o.opt(key);
+        if (v == null || v == JSONObject.NULL) return "";
+        String s = String.valueOf(v).trim();
+        return "null".equals(s) ? "" : s;
+    }
+
+    /** Nothing picked yet: the panel says so rather than sitting blank. */
+    private void showNothingTuned() {
+        npLabel.setText("NOT TUNED");
+        nowPlayingText.setText("nothing tuned yet");
+        nowPlayingText.setTextColor(palette.muted);
+        npArtist.setText("pick a station to tune in");
+        npAlbum.setText("");
+        npShowRow.setVisibility(View.GONE);
+        npStation.setText("");
+        npStatus.setText("");
+        stripCaption.setText("NOW PLAYING");
+        stripTrack.setText("nothing tuned yet");
+        stripTrack.setTextColor(palette.muted);
+        setPlayGlyph(false);
+        setOnAir(false);
+        setCover(null);
+    }
+
+    /** Tuned, and the station answered. */
+    private void showNowPlaying(String base, NowPlaying np) {
+        npLabel.setText("NOW PLAYING");
+        nowPlayingText.setText(np.title);
+        nowPlayingText.setTextColor(palette.ink);
+        npArtist.setText(np.artist);
+
+        StringBuilder album = new StringBuilder(np.album);
+        if (!np.year.isEmpty()) {
+            if (album.length() > 0) album.append("  ·  ");
+            album.append(np.year);
+        }
+        npAlbum.setText(album.toString());
+
+        boolean hasShow = np.show != null && !np.show.isEmpty();
+        npShowRow.setVisibility(hasShow ? View.VISIBLE : View.GONE);
+        if (hasShow) npShowName.setText(np.show.toUpperCase(Locale.US));
+
+        String station = currentStationName();
+        npStation.setText(station);
+        // Only claims a bitrate the station actually published — and says
+        // nothing at all until the player has reported a state, rather than
+        // calling a station "paused" on the strength of not having asked yet.
+        npStatus.setText(!pageLoaded ? ""
+                : audioLive
+                        ? (np.bitrate.isEmpty() ? "playing" : "playing  ·  " + np.bitrate + " kbps")
+                        : "paused");
+
+        stripCaption.setText(station == null || station.isEmpty()
+                ? "NOW PLAYING" : "NOW PLAYING  ·  " + station.toUpperCase(Locale.US));
+        stripTrack.setText(np.artist.isEmpty() ? np.title : np.title + " — " + np.artist);
+        stripTrack.setTextColor(palette.ink);
+
+        loadCover(base, np.coverId);
+    }
+
+    /** Tuned, but the station isn't answering its API. */
+    private void showStationSilent() {
+        npLabel.setText("OFF AIR");
+        nowPlayingText.setText("station not responding");
+        nowPlayingText.setTextColor(palette.muted);
+        npArtist.setText("");
+        npAlbum.setText("");
+        npShowRow.setVisibility(View.GONE);
+        // Name, not address — same screenshot reasoning as the station rows.
+        npStation.setText(currentStationName());
+        npStatus.setText("");
+        stripCaption.setText("OFF AIR");
+        stripTrack.setText(currentStationName());
+        stripTrack.setTextColor(palette.muted);
+        setOnAir(false);
+        setCover(null);
+    }
+
+    /**
+     * The on-air lamp: a slow alpha breath, only while audio is actually live.
+     * The level meter starts and stops on the same signal — both are claims
+     * that sound is coming out, so neither may outlive it.
+     */
     private void setOnAir(boolean live) {
         if (live) {
             onAirDot.setVisibility(View.VISIBLE);
@@ -1096,14 +1559,17 @@ public class MainActivity extends Activity {
             onAirDot.setAlpha(1f);
             onAirDot.setVisibility(View.INVISIBLE);
         }
+        setMetersRunning(live);
     }
 
     private void setCover(android.graphics.Bitmap bmp) {
         if (bmp == null) {
             shownCoverId = null;
             npArt.setImageDrawable(null);
+            if (stripArt != null) stripArt.setImageDrawable(null);
         } else {
             npArt.setImageBitmap(bmp);
+            if (stripArt != null) stripArt.setImageBitmap(bmp);
         }
     }
 
@@ -1112,7 +1578,10 @@ public class MainActivity extends Activity {
         if (subsonicId == null || subsonicId.isEmpty()) { setCover(null); return; }
         if (subsonicId.equals(shownCoverId)) return;
         shownCoverId = subsonicId;
-        final int artPx = dp(62); // the square the card draws it into
+        // Decoded for the LARGER of the two squares that may show it — the
+        // panel's 150dp and the minimal strip's 68dp share one bitmap, and
+        // sizing for the strip would leave the panel's art soft.
+        final int artPx = dp(150);
         offThread(() -> {
             android.graphics.Bitmap bmp = null;
             HttpURLConnection c = null;
@@ -1129,8 +1598,9 @@ public class MainActivity extends Activity {
             } finally { Http.close(c); }
             final android.graphics.Bitmap out = bmp;
             ui.post(() -> {
-                if (out != null && subsonicId.equals(shownCoverId)) npArt.setImageBitmap(out);
-                else if (out == null && subsonicId.equals(shownCoverId)) npArt.setImageDrawable(null);
+                if (!subsonicId.equals(shownCoverId)) return; // a later track won
+                npArt.setImageBitmap(out);            // null clears it
+                if (stripArt != null) stripArt.setImageBitmap(out);
             });
         });
     }
@@ -1238,8 +1708,13 @@ public class MainActivity extends Activity {
     }
 
     private void setPlayGlyph(boolean playing) {
-        playButton.setText(playing ? "❚❚" : "▶");
-        playButton.setTextSize(playing ? 15 : 20);
+        for (android.widget.Button b : playButtons) {
+            b.setText(playing ? "❚❚" : "▶");
+            // The pause mark is two glyphs wide where play is one, so it steps
+            // down from whatever size that button was built at.
+            float base = b.getTag() instanceof Float ? (Float) b.getTag() : 14f;
+            b.setTextSize(playing ? base * 0.75f : base);
+        }
     }
 
     /** Play/pause from the station list — tunes the highlighted station if idle. */
@@ -1300,6 +1775,7 @@ public class MainActivity extends Activity {
         int last = indexOfUrl(lastStationUrl());
         if (last >= 0) stationsListView.setSelection(last);
         ui.removeCallbacks(nowPlayingPoll);
+        npDelayMs = NOW_PLAYING_POLL_MS; // a fresh look asks straight away
         ui.post(nowPlayingPoll);
         probeStations();
         refreshPalette();
@@ -1429,15 +1905,34 @@ public class MainActivity extends Activity {
         e.setTypeface(Typeface.MONOSPACE);
         GradientDrawable bg = fieldBg();
         e.setBackground(bg);
-        strokeOnFocus(e, bg);
+        // Focus styling is set below rather than through strokeOnFocus(): this
+        // field needs the same listener to re-arm the keyboard gate.
         e.setPadding(dp(12), dp(10), dp(12), dp(10));
-        // Landing on the field with the D-pad shows no keyboard; pressing OK
-        // (which fires onClick) is what opens it.
+        // Landing on the field with the D-pad shows no keyboard; pressing OK is
+        // what opens it.
         e.setShowSoftInputOnFocus(false);
-        e.setOnClickListener(v -> {
-            e.setShowSoftInputOnFocus(true);
-            InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
-            if (imm != null) imm.showSoftInput(e, InputMethodManager.SHOW_IMPLICIT);
+        e.setOnClickListener(v -> activateField(e));
+        // The click listener alone was not enough on Fire TV. A focused
+        // EditText consumes DPAD_CENTER and ENTER as key events of its own and
+        // never calls performClick(), so OK did nothing at all: no keyboard, no
+        // way to type, and no clue why. Opening on the key press is what the
+        // remote actually sends.
+        e.setOnKeyListener((v, keyCode, ev) -> {
+            if (ev == null || ev.getAction() != KeyEvent.ACTION_DOWN) return false;
+            boolean ok = keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+                    || keyCode == KeyEvent.KEYCODE_ENTER
+                    || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
+                    || keyCode == KeyEvent.KEYCODE_BUTTON_A;
+            if (!ok) return false;
+            activateField(e);
+            return true;
+        });
+        // Leaving the field re-arms the gate. Otherwise the first OK press
+        // turned auto-show on for good, and every later pass through the field
+        // on the way to the buttons threw the keyboard back up.
+        e.setOnFocusChangeListener((v, has) -> {
+            bg.setStroke(dp(has ? 2 : 1), has ? palette.accent : Colors.withAlpha(palette.ink, 90));
+            if (!has) e.setShowSoftInputOnFocus(false);
         });
         return e;
     }
@@ -1480,14 +1975,12 @@ public class MainActivity extends Activity {
         ruleLp.topMargin = dp(6);
         box.addView(rule, ruleLp);
 
-        // --- name -------------------------------------------------------
-        // No mic buttons here: the TV's own keyboard already offers
-        // press-and-hold-to-speak once a field is opened.
-        box.addView(dlgCaption("NAME  (OPTIONAL)"));
-        final EditText nameIn = dlgField("leave blank to use the station's own name");
-        box.addView(nameIn, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
+        // The form runs in the order the answers are actually decided:
+        // protocol, then the address, then the name — which is optional and can
+        // be left to the station to supply. Asking for the name first meant the
+        // one field nobody has to fill in was the one blocking the way to the
+        // two that matter.
+        //
         // --- address ----------------------------------------------------
         box.addView(dlgCaption("ADDRESS"));
         final boolean[] useHttps = {false};
@@ -1521,6 +2014,14 @@ public class MainActivity extends Activity {
         final EditText hostIn = dlgField("192.168.1.x:7700  or  radio.example.com");
         box.addView(hostIn, urlLp);
 
+        // --- name -------------------------------------------------------
+        // No mic buttons here: the TV's own keyboard already offers
+        // press-and-hold-to-speak once a field is opened.
+        box.addView(dlgCaption("NAME  (OPTIONAL)"));
+        final EditText nameIn = dlgField("leave blank to use the station's own name");
+        box.addView(nameIn, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
         if (editing != null) {
             nameIn.setText(editing.name);
             useHttps[0] = editing.url.startsWith("https://");
@@ -1530,9 +2031,9 @@ public class MainActivity extends Activity {
 
         // Done on the keyboard should save, exactly as the Save button does —
         // having to dismiss the IME and hunt for a button is a poor way to end
-        // a form on a remote. NEXT moves name -> address without closing it.
-        nameIn.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_NEXT);
-        hostIn.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        // a form on a remote. NEXT moves address -> name without closing it.
+        hostIn.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_NEXT);
+        nameIn.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
 
         final AlertDialog dlg = new AlertDialog.Builder(this)
                 .setView(box)
@@ -1558,14 +2059,14 @@ public class MainActivity extends Activity {
             dlg.dismiss();
         };
 
-        nameIn.setOnEditorActionListener((v, actionId, ev) -> {
+        hostIn.setOnEditorActionListener((v, actionId, ev) -> {
             if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_NEXT) {
-                activateField(hostIn);
+                activateField(nameIn);
                 return true;
             }
             return false;
         });
-        hostIn.setOnEditorActionListener((v, actionId, ev) -> {
+        nameIn.setOnEditorActionListener((v, actionId, ev) -> {
             boolean done = actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE
                     || actionId == android.view.inputmethod.EditorInfo.IME_ACTION_GO
                     || actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND
@@ -1643,6 +2144,7 @@ public class MainActivity extends Activity {
         // showStations() would normally have started, and a liveness probe.
         probeStations();
         ui.removeCallbacks(nowPlayingPoll);
+        npDelayMs = NOW_PLAYING_POLL_MS; // a fresh look asks straight away
         ui.post(nowPlayingPoll);
         if (autoName) fetchStationName(url);
     }
@@ -1949,21 +2451,26 @@ public class MainActivity extends Activity {
     /* Sleep timer                                                         */
     /* ------------------------------------------------------------------ */
 
-    /** A pill button for the masthead, registered so palette changes reach it. */
+    /**
+     * A masthead chip. Square rather than a pill, in small letterspaced caps:
+     * the rounded pills were the one soft shape on a screen whose every other
+     * edge — rules, panel, art, transport — is a right angle.
+     */
     private android.widget.Button buildChip(String label, View.OnClickListener onClick) {
         final android.widget.Button b = new android.widget.Button(this);
         b.setText(label);
-        b.setAllCaps(false);
-        b.setTextSize(15);
+        b.setAllCaps(true);
+        b.setTextSize(10);
         b.setTypeface(Typeface.MONOSPACE);
+        b.setLetterSpacing(0.1f);
         b.setTextColor(Colors.MUTED);
         b.setMinWidth(0);
         b.setMinimumWidth(0);
         b.setMinHeight(0);
         b.setMinimumHeight(0);
-        b.setPadding(dp(16), dp(8), dp(16), dp(9));
+        b.setPadding(dp(13), dp(7), dp(13), dp(7));
         final GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(20));
+        bg.setCornerRadius(0);
         b.setBackground(bg);
         b.setOnFocusChangeListener((v, has) -> styleChip(b, has));
         b.setOnClickListener(onClick);
@@ -1976,9 +2483,9 @@ public class MainActivity extends Activity {
     private void styleChip(android.widget.Button b, boolean focused) {
         GradientDrawable bg = chipBgs.get(b);
         if (bg == null) return;
-        bg.setColor(focused ? Colors.withAlpha(palette.accent, 46) : palette.surface);
+        bg.setColor(focused ? Colors.withAlpha(palette.accent, 46) : Color.TRANSPARENT);
         bg.setStroke(dp(focused ? 2 : 1),
-                focused ? palette.accent : Colors.withAlpha(palette.ink, 90));
+                focused ? palette.accent : Colors.withAlpha(palette.ink, 75));
         b.setTextColor(focused ? palette.ink : palette.muted);
         // The drawn glyph has no text colour to inherit.
         if (b == themeChip && themeGlyph != null) {
@@ -1988,7 +2495,7 @@ public class MainActivity extends Activity {
 
     /** Keep the masthead chip in step with the stored setting. */
     private void updateSleepChip() {
-        if (sleepChip != null) sleepChip.setText("☾  " + sleepHours() + "h");
+        if (sleepChip != null) sleepChip.setText("SLEEP " + sleepHours() + "H");
     }
 
     private int sleepHours() {

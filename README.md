@@ -32,8 +32,15 @@ review the source or build it yourself if that matters to you.
 **The picker**
 - Add any number of stations by address; the name is optional and is adopted
   from the station itself when left blank.
-- Now playing, cover art and a transport control, polled from the station's
-  public API — no authentication required, even for private stations.
+- A full-height now-playing panel beside the list: cover art, track, artist,
+  album, and the show or DJ on air where a station publishes one. Polled from
+  the station's public API — no authentication required, even for private
+  stations.
+- A level meter that moves only while sound is actually coming out, so a glance
+  says whether the stream is live or stalled.
+- `NP` collapses the panel to a single strip and gives the list the full width.
+- A station that is answering shows a green lamp; only the tuned station is
+  labelled, and only a station that is not responding is spelled out.
 - Light, Dark, or Station theme, the last tinting the screen with the colours
   of whatever is currently on air.
 - Addresses are deliberately not rendered on this screen, so a photograph of a
@@ -191,6 +198,8 @@ from this repository, as are the keystore and the built APK.
 | `app/java/com/wave/tv/Palette.java` | The picker's colour scheme, and reading a station's own theme tokens |
 | `app/java/com/wave/tv/Colors.java` | Wave TV's ink, and the contrast arithmetic that keeps a station's theme readable |
 | `app/java/com/wave/tv/ThemeGlyph.java` | The sun / moon / broadcast marks on the theme toggle |
+| `app/java/com/wave/tv/MicGlyph.java` | The studio mic that marks the show/DJ line |
+| `app/java/com/wave/tv/LevelMeter.java` | The five-bar meter beside the transport |
 | `app/java/com/wave/tv/Station.java` | One entry in the picker: a name and an address |
 | `app/assets/tvhelper.js` | Injected into the page — spatial navigation and the JavaScript ↔ native bridge |
 | `app/res/` | Launcher icon, television banner, theme |
