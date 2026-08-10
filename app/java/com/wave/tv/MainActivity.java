@@ -2263,6 +2263,9 @@ public class MainActivity extends Activity {
     /* ------------------------------------------------------------------ */
 
     private boolean swallowCenterUp = false;
+    /** When OK went down, and whether its long press has already fired. */
+    private long centerDownAt = 0;
+    private boolean centerLongFired = false;
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
@@ -2277,9 +2280,41 @@ public class MainActivity extends Activity {
                 swallowCenterUp = true;
                 return true;
             }
-            if (event.getAction() == KeyEvent.ACTION_UP && swallowCenterUp) {
-                swallowCenterUp = false;
-                return true;
+            // Hold OK in the player for the menu.
+            //
+            // The Google TV Streamer's remote has no MENU button, which left
+            // Reload player and Voice request with no route to them at all on
+            // that device. The picker has held OK for options since v1, so this
+            // is the same gesture in the other half of the app.
+            //
+            // Detected here rather than through onKeyLongPress: the WebView has
+            // focus in the player and consumes the key down, so the Activity's
+            // own key callbacks — and the framework's long-press tracking with
+            // them — never run. Deliberately built so that a remote which does
+            // NOT auto-repeat simply behaves as it always did: the first press
+            // is never swallowed, and nothing is intercepted unless a genuine
+            // long press is seen.
+            if (event.getAction() == KeyEvent.ACTION_DOWN
+                    && !stationsVisible() && !editableFocused) {
+                if (event.getRepeatCount() == 0) {
+                    centerDownAt = event.getEventTime();
+                    centerLongFired = false;
+                } else if (!centerLongFired && centerDownAt > 0
+                        && event.getEventTime() - centerDownAt
+                                >= android.view.ViewConfiguration.getLongPressTimeout()) {
+                    centerLongFired = true;
+                    swallowCenterUp = true;
+                    showMenu();
+                    return true;
+                }
+            }
+            if (event.getAction() == KeyEvent.ACTION_UP) {
+                centerDownAt = 0;
+                centerLongFired = false;
+                if (swallowCenterUp) {
+                    swallowCenterUp = false;
+                    return true;
+                }
             }
         }
         return super.dispatchKeyEvent(event);
