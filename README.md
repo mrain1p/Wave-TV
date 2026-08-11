@@ -229,8 +229,8 @@ over.
 
 ## Licence
 
-[MIT](LICENSE). Use it, change it, ship your own build — just keep the
-copyright notice with it. There is no warranty of any kind.
+[MIT](LICENSE). Use it, change it, ship your own build — just keep the licence
+with it. There is no warranty of any kind.
 
 SUB/WAVE itself is a separate project under its own licence; nothing here
 grants you anything in respect of it.
