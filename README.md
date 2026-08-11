@@ -16,14 +16,32 @@ review the source or build it yourself if that matters to you.
 
 <table>
 <tr>
-<td width="33%"><img src="docs/station-picker.jpg" width="100%" alt="The Wave TV station picker on a television" /></td>
-<td width="33%"><img src="docs/player.jpg" width="100%" alt="A SUB/WAVE web player running fullscreen on a television" /></td>
-<td width="33%"><img src="docs/request.jpg" width="100%" alt="The SUB/WAVE request drawer, opened with a remote" /></td>
+<td width="33%" valign="top">
+<img src="docs/picker-light.jpg" width="100%" alt="The Wave TV station picker in its light theme, showing a tuned station and the now-playing panel" /><br />
+<sub><b>The only screen the app draws.</b> The station list on the left, what is playing on the right — cover art, track, artist, album and the show on air, read from the station's public API. Addresses are never rendered here.</sub>
+</td>
+<td width="33%" valign="top">
+<img src="docs/picker-dark.jpg" width="100%" alt="The same picker in its dark theme" /><br />
+<sub><b>Light, dark, or the station's own colours.</b> One button cycles them. In station mode the picker samples the loaded player's theme tokens and repaints to match whatever is on air.</sub>
+</td>
+<td width="33%" valign="top">
+<img src="docs/picker-minimal.jpg" width="100%" alt="The picker in minimal mode, with the now-playing panel collapsed to a strip above the footer" /><br />
+<sub><b>Minimal mode.</b> <code>NP</code> folds the panel down to a single strip and gives the list the full width. The level meter keeps moving only while sound is actually coming out.</sub>
+</td>
 </tr>
 <tr>
-<td valign="top"><sub><b>The only screen the app draws.</b> Station list with now playing, cover art and transport, polled from the station's public API. Addresses are never displayed here. Station name redacted.</sub></td>
-<td valign="top"><sub><b>Everything past the picker is SUB/WAVE's interface.</b> Masthead, waveform, commentary line, side rail and the operator's theme, unmodified. Wave TV contributes the focus navigation. Branding redacted.</sub></td>
-<td valign="top"><sub><b>SUB/WAVE's request drawer, opened by remote.</b> Text arrives from the on-screen keyboard or from voice dictation. Branding redacted.</sub></td>
+<td width="33%" valign="top">
+<img src="docs/player.jpg" width="100%" alt="A SUB/WAVE web player running fullscreen on a television" /><br />
+<sub><b>Everything past the picker is SUB/WAVE's interface.</b> Masthead, waveform, commentary line, side rail and the operator's theme, unmodified. Wave TV contributes the focus navigation and nothing else.</sub>
+</td>
+<td width="33%" valign="top">
+<img src="docs/request.jpg" width="100%" alt="The SUB/WAVE request drawer, opened with a remote" /><br />
+<sub><b>The request drawer, opened by remote.</b> D-pad navigation lands on the page's real controls; decorative targets are skipped so focus only stops where pressing OK does something.</sub>
+</td>
+<td width="33%" valign="top">
+<img src="docs/keyboard.jpg" width="100%" alt="The television's on-screen keyboard over the request drawer, with press-and-hold-to-speak offered" /><br />
+<sub><b>Typing on a television.</b> OK on a focused field raises the keyboard against the real input; the set-top box's own press-and-hold-to-speak dictation works from there.</sub>
+</td>
 </tr>
 </table>
 
