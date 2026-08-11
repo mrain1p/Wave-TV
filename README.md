@@ -1,5 +1,3 @@
-<img src="icon.png" alt="Wave TV" width="112" align="right" />
-
 # Wave TV
 
 **An Android TV and Fire TV player for [SUB/WAVE](https://github.com/perminder-klair/subwave)
@@ -231,4 +229,8 @@ over.
 
 ## Licence
 
-None chosen yet. Open an issue if a permissive licence would be useful.
+[MIT](LICENSE). Use it, change it, ship your own build — just keep the
+copyright notice with it. There is no warranty of any kind.
+
+SUB/WAVE itself is a separate project under its own licence; nothing here
+grants you anything in respect of it.
