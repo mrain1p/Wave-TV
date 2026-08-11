@@ -1356,8 +1356,23 @@ public class MainActivity extends Activity {
      * fistful of finals crossing the boundary.
      */
     private static class NowPlaying {
+        /**
+         * Whether the station named a track. A station that answers with no
+         * track — which is what a changeover looks like from out here — is
+         * still very much on the air, and must not be reported as silent.
+         */
+        boolean hasTrack;
         String title, artist, album, year, coverId, show, bitrate;
     }
+
+    /**
+     * Consecutive readings that got no answer at all. One miss is a blip and is
+     * ridden out on the last good reading; it takes two in a row before the
+     * panel will call a station silent.
+     */
+    private int npMisses = 0;
+    /** The station whose track is currently on screen, so a gap can keep it. */
+    private String npTrackForUrl = null;
 
     /**
      * How long until the next reading. Seven seconds while a station is
@@ -1390,17 +1405,36 @@ public class MainActivity extends Activity {
             } else {
                 // Ask the page whether audio is actually rolling.
                 syncPlaybackState();
+                final String stationUrl = currentUrl;
                 final String base = currentUrl.endsWith("/") ? currentUrl : currentUrl + "/";
                 offThread(() -> {
                     NowPlaying np = readNowPlaying(base);
                     ui.post(() -> {
                         if (!stationsVisible()) return;
                         if (np != null) {
+                            npMisses = 0;
                             npPollSucceeded();
-                            showNowPlaying(base, np);
+                            // This station just answered us, so whatever the
+                            // health probe decided when the picker opened is
+                            // out of date. Without this the row went on saying
+                            // OFF AIR next to a panel showing the track that
+                            // was playing — the probe only runs on the way in
+                            // and never got a second opinion.
+                            markReachable(stationUrl, true);
+                            if (np.hasTrack) showNowPlaying(base, np);
+                            else showBetweenTracks();
                         } else {
-                            npPollFailed();
-                            showStationSilent();
+                            // One miss rides on the last good reading. A track
+                            // change is enough to make a station miss a beat,
+                            // and blanking the panel for it — then backing the
+                            // poll off to half a minute — is how a two-second
+                            // gap became thirty seconds of "not responding".
+                            npMisses++;
+                            if (npMisses >= 2) {
+                                npPollFailed();
+                                markReachable(stationUrl, false);
+                                showStationSilent();
+                            }
                         }
                     });
                 });
@@ -1428,8 +1462,12 @@ public class MainActivity extends Activity {
             }
             JSONObject o = new JSONObject(body);
             JSONObject track = o.optJSONObject("nowPlaying");
-            if (track == null) return null;
             NowPlaying np = new NowPlaying();
+            // Answering at all is the thing being reported here. A body with no
+            // track in it still proves the station is up, so it comes back as a
+            // reading with hasTrack false rather than as a failure.
+            if (track == null) return np;
+            np.hasTrack = true;
             np.title = track.optString("title", "—");
             np.artist = track.optString("artist", "");
             np.album = track.optString("album", "");
@@ -1473,8 +1511,49 @@ public class MainActivity extends Activity {
         return "null".equals(s) ? "" : s;
     }
 
+    /**
+     * Record whether a station answered, and repaint its row if that changed.
+     *
+     * Two things write here: the health probe on the way into the picker, and
+     * every successful now-playing reading afterwards. The probe alone was a
+     * single opinion formed once and never revisited, so one slow moment on the
+     * way in left a row reading OFF AIR for as long as the picker stayed open —
+     * beside a panel cheerfully showing what that station was playing.
+     */
+    private void markReachable(String url, boolean reachable) {
+        if (url == null) return;
+        boolean changed = reachable ? unreachable.remove(url) : unreachable.add(url);
+        if (changed && stationsVisible()) stationsAdapter.notifyDataSetChanged();
+    }
+
+    /**
+     * The station answered but named no track — a changeover.
+     *
+     * The last track stays on screen. Replacing it with "nothing playing" for
+     * the couple of seconds between songs is precisely the flicker this exists
+     * to stop; only a station we have never seen playing anything gets the
+     * neutral text.
+     */
+    private void showBetweenTracks() {
+        if (currentUrl != null && currentUrl.equals(npTrackForUrl)) return;
+        npLabel.setText("ON AIR");
+        nowPlayingText.setText("between tracks");
+        nowPlayingText.setTextColor(palette.muted);
+        npArtist.setText("");
+        npAlbum.setText("");
+        npShowRow.setVisibility(View.GONE);
+        npStation.setText(currentStationName());
+        npStatus.setText("");
+        stripCaption.setText("ON AIR");
+        stripTrack.setText("between tracks");
+        stripTrack.setTextColor(palette.muted);
+        setCover(null);
+    }
+
     /** Nothing picked yet: the panel says so rather than sitting blank. */
     private void showNothingTuned() {
+        npMisses = 0;
+        npTrackForUrl = null;
         npLabel.setText("NOT TUNED");
         nowPlayingText.setText("nothing tuned yet");
         nowPlayingText.setTextColor(palette.muted);
@@ -1493,6 +1572,7 @@ public class MainActivity extends Activity {
 
     /** Tuned, and the station answered. */
     private void showNowPlaying(String base, NowPlaying np) {
+        npTrackForUrl = currentUrl;   // a gap after this keeps it on screen
         npLabel.setText("NOW PLAYING");
         nowPlayingText.setText(np.title);
         nowPlayingText.setTextColor(palette.ink);
@@ -1529,6 +1609,7 @@ public class MainActivity extends Activity {
 
     /** Tuned, but the station isn't answering its API. */
     private void showStationSilent() {
+        npTrackForUrl = null;
         npLabel.setText("OFF AIR");
         nowPlayingText.setText("station not responding");
         nowPlayingText.setTextColor(palette.muted);
@@ -1776,6 +1857,7 @@ public class MainActivity extends Activity {
         if (last >= 0) stationsListView.setSelection(last);
         ui.removeCallbacks(nowPlayingPoll);
         npDelayMs = NOW_PLAYING_POLL_MS; // a fresh look asks straight away
+        npMisses = 0;
         ui.post(nowPlayingPoll);
         probeStations();
         refreshPalette();
@@ -1801,10 +1883,7 @@ public class MainActivity extends Activity {
                 } catch (Exception ignored) {
                 } finally { Http.close(c); }
                 final boolean reachable = ok;
-                ui.post(() -> {
-                    boolean changed = reachable ? unreachable.remove(url) : unreachable.add(url);
-                    if (changed && stationsVisible()) stationsAdapter.notifyDataSetChanged();
-                });
+                ui.post(() -> markReachable(url, reachable));
             });
         }
     }
@@ -2145,6 +2224,7 @@ public class MainActivity extends Activity {
         probeStations();
         ui.removeCallbacks(nowPlayingPoll);
         npDelayMs = NOW_PLAYING_POLL_MS; // a fresh look asks straight away
+        npMisses = 0;
         ui.post(nowPlayingPoll);
         if (autoName) fetchStationName(url);
     }
