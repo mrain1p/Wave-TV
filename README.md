@@ -1,3 +1,5 @@
+<img src="icon.png" alt="Wave TV" width="112" align="right" />
+
 # Wave TV
 
 **An Android TV and Fire TV player for [SUB/WAVE](https://github.com/perminder-klair/subwave)
