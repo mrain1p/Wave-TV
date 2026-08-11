@@ -124,14 +124,21 @@ blank to adopt the station's own.
 |---|---|
 | D-pad | Move focus between the player's controls |
 | OK / Select | Activate the focused control |
+| **Hold OK** | Voice request · Sleep timer · Switch station · Reload · Exit |
 | Back | Close an open drawer; twice returns to the picker, audio continuing |
 | Play/Pause | Toggle tune-in, or start voice dictation while a text field is focused |
 | Stop | Mute and unmute |
-| Menu | Voice request · Switch station · Reload · Exit |
+| Menu | The same menu as holding OK, on remotes that have the button |
 | Search / mic | Voice request, where the remote routes that key to applications |
 
-On the picker: **OK** tunes in, **long-press OK** offers Edit, Remove and
-Forget saved password, **Menu** opens settings.
+**Nothing is reachable only by Menu.** Not every television remote has that
+button — the Google TV Streamer's has none at all — so in the player, holding
+OK opens the same menu.
+
+On the picker: **OK** tunes in, **holding OK** on a station offers Edit, Remove
+and Forget saved password, and **Back twice** exits. Adding a station, the
+theme, the now-playing panel and the sleep timer are the four buttons along the
+top of the screen, so nothing there needs a Menu button either.
 
 ## Permissions and privacy
 
