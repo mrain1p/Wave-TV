@@ -1767,7 +1767,7 @@ public class MainActivity extends Activity {
         remember.setPadding(0, dp(12), 0, 0);
         box.addView(remember);
 
-        new AlertDialog.Builder(this)
+        final AlertDialog auth = new AlertDialog.Builder(this)
                 .setView(box)
                 .setPositiveButton("Sign in", (d, w) -> {
                     String u = userIn.getText().toString();
@@ -1785,7 +1785,9 @@ public class MainActivity extends Activity {
                     showStations();
                 })
                 .setOnCancelListener(d -> { handler.cancel(); showStations(); })
-                .show();
+                .create();
+        allowIme(auth);
+        auth.show();
     }
 
     private void setPlayGlyph(boolean playing) {
@@ -2171,15 +2173,51 @@ public class MainActivity extends Activity {
             else stationsListView.requestFocus();
         }));
 
+        allowIme(dlg);
         dlg.show();
     }
 
-    /** Open a field for typing — the explicit OK press the keyboard gate wants. */
-    private void activateField(EditText e) {
-        e.requestFocus();
+    /**
+     * Open a field for typing — the explicit OK press the keyboard gate wants.
+     *
+     * SHOW_IMPLICIT is advisory, and the framework is entitled to decline it.
+     * The case where it does decline is a window that is not in touch mode,
+     * which is every television driven by a remote — so on Fire TV the request
+     * was simply dropped and OK appeared to do nothing at all. That is the bug
+     * behind "the keyboard will not surface".
+     *
+     * So: ask after the focus change has actually landed, take the answer
+     * seriously, and if it is no, ask again in the form that cannot be refused.
+     * toggleSoftInput would hide an open keyboard, which is why it is only
+     * reached when showSoftInput has just told us there isn't one.
+     */
+    private void activateField(final EditText e) {
         e.setShowSoftInputOnFocus(true);
-        InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
-        if (imm != null) imm.showSoftInput(e, InputMethodManager.SHOW_IMPLICIT);
+        e.requestFocus();
+        e.post(() -> {
+            InputMethodManager imm =
+                    (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (imm == null) return;
+            imm.restartInput(e);
+            if (!imm.showSoftInput(e, InputMethodManager.SHOW_IMPLICIT)) {
+                imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0);
+            }
+        });
+    }
+
+    /**
+     * Let a dialog's own window host the keyboard.
+     *
+     * A Dialog carries its own Window, so the soft-input mode set on the
+     * Activity in onCreate does not reach it. ADJUST_RESIZE so the fields stay
+     * above the keys rather than under them, and STATE_UNCHANGED so the
+     * framework never opens or closes the IME behind our back.
+     */
+    private void allowIme(android.app.Dialog d) {
+        if (d.getWindow() == null) return;
+        d.getWindow().setSoftInputMode(
+                android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED
+                        | android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     }
 
     private void hideKeyboardFrom(View v) {
