@@ -1,15 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.wave.tv"
-    android:versionCode="29"
-    android:versionName="1.3.2">
+    android:versionCode="30"
+    android:versionName="1.4.0">
 
     <uses-sdk android:minSdkVersion="22" android:targetSdkVersion="34" />
 
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Runs on TVs (leanback) and, if sideloaded there, phones/tablets too. -->
-    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <!-- A television application. required="true" is store filtering, not an
+         install gate: Google Play lists the app only for TV devices (which is
+         what keeps a TV app inside Play's TV-tier target-API rules), while a
+         sideloaded install on a phone or tablet still works exactly as before
+         - adb and package installers ignore uses-feature. -->
+    <uses-feature android:name="android.software.leanback" android:required="true" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
     <application
