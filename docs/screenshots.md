@@ -1,10 +1,16 @@
 # Capturing the screenshots
 
-The previous set is not in the repository. Every frame showed a commercially
-released single with its album cover in the now-playing panel, which
-reproduced someone else's artwork here and — more to the point — presented the
-app as a way to hear commercial music. Amazon's content review read it that
-way, and it is not what the app is for.
+The six frames all showed a commercially released single: its cover, its title,
+its artist and album, its genre tags — and, in the player frames, the page tint
+that the Station theme samples out of that cover. That reproduced artwork this
+repository has no licence to, and presented the app as a way to hear commercial
+music. Amazon's content review read it exactly that way.
+
+**Current state.** The three player frames (`player`, `request`, `keyboard` /
+`04`–`06`) are withheld. The three picker frames (`01`–`03`) are still the old
+captures, kept so the README and the store listing are not bare — Amazon's
+minimum is three. They are *not* clean: each still shows the same cover as a
+small thumbnail with the track title beside it. Replace all six together.
 
 ## The rule
 

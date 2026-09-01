@@ -86,7 +86,7 @@ https://github.com/mrain1p/Wave-TV
 | App icon 512×512 | `icon-512.png` |
 | Feature graphic 1024×500 | `feature-graphic-1024x500.png` |
 | TV banner 1280×720 | `tv-banner-1280x720.png` |
-| TV screenshots (16:9) | `screenshots/` — pending re-capture, see `docs/screenshots.md` |
+| TV screenshots (16:9) | `screenshots/` — three picker frames; player frames pending, see `docs/screenshots.md` |
 
 ## App access → "All or some functionality is restricted" → instructions
 

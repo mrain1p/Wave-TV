@@ -1,4 +1,9 @@
-Screenshots pending re-capture — see [`docs/screenshots.md`](../../../docs/screenshots.md).
+Screenshots — see [`docs/screenshots.md`](../../../docs/screenshots.md).
 
-Six PNGs at 1920×1080 belong here. The previous set was removed because every
-frame showed a commercial release's album cover.
+`01`–`03` (picker) are the previous captures, kept temporarily. They still show
+a commercial release as a small cover thumbnail with its track title, and are
+due for replacement.
+
+`04`–`06` (player, request, keyboard) are withheld: they showed that cover at
+full size, with the title, artist, album and genre metadata, and the page tint
+the Station theme samples from the cover.

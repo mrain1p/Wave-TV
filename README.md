@@ -40,20 +40,6 @@ station is tuned, the player declines to navigate anywhere off that station's
 own host, so it cannot be steered to a third-party site from inside a loaded
 page.
 
-<!--
-Screenshots are being re-taken.
-
-The previous six frames all showed a commercially released single, with its
-album cover, in the now-playing panel. That reproduces someone else's artwork
-in this repository and misrepresents the app as a way to hear commercial music,
-which is neither what it is for nor something this project can license.
-
-Replacements should show a station playing material the operator holds the
-rights to; art/covers/ has original artwork for the now-playing panel. Restore
-this block once docs/*.jpg have been replaced.
--->
-
-<!--
 <table>
 <tr>
 <td width="33%" valign="top">
@@ -69,22 +55,10 @@ this block once docs/*.jpg have been replaced.
 <sub><b>Minimal mode.</b> <code>NP</code> folds the panel down to a single strip and gives the list the full width. The level meter keeps moving only while sound is actually coming out.</sub>
 </td>
 </tr>
-<tr>
-<td width="33%" valign="top">
-<img src="docs/player.jpg" width="100%" alt="A SUB/WAVE web player running fullscreen on a television" /><br />
-<sub><b>Everything past the picker is SUB/WAVE's interface.</b> Masthead, waveform, commentary line, side rail and the operator's theme, unmodified. Wave TV contributes the focus navigation and nothing else.</sub>
-</td>
-<td width="33%" valign="top">
-<img src="docs/request.jpg" width="100%" alt="The SUB/WAVE request drawer, opened with a remote" /><br />
-<sub><b>The request drawer, opened by remote.</b> D-pad navigation lands on the page's real controls; decorative targets are skipped so focus only stops where pressing OK does something.</sub>
-</td>
-<td width="33%" valign="top">
-<img src="docs/keyboard.jpg" width="100%" alt="The television's on-screen keyboard over the request drawer, with press-and-hold-to-speak offered" /><br />
-<sub><b>Typing on a television.</b> OK on a focused field raises the keyboard against the real input; the set-top box's own press-and-hold-to-speak dictation works from there.</sub>
-</td>
-</tr>
 </table>
--->
+<!-- The player, request and keyboard frames are withheld: they showed a
+     commercial release's cover, title and metadata, and the page tint the
+     Station theme samples from that cover. See docs/screenshots.md. -->
 
 ## Features
 
