@@ -2,29 +2,38 @@
 
 ## App name (max 30 chars)
 
-    Wave TV: SUB/WAVE player
+    Wave TV: SUB/WAVE client
 
 (24 chars. Plain "Wave TV" also fits but is easier to collide with an
-existing listing; the suffix says what it is.)
+existing listing; the suffix says what it is. "client" rather than "player"
+because the app is the screen in front of somebody's own server, and that is
+the distinction store review cares about.)
 
 ## Short description (max 80 chars)
 
-    Tune SUB/WAVE internet radio stations on your TV, driven by the remote.
+    Remote-friendly client for your own SUB/WAVE internet radio server.
 
-(71 chars.)
+(67 chars.)
 
 ## Full description (max 4000 chars)
 
-Wave TV puts SUB/WAVE internet radio stations on your television.
+Wave TV is a television client for SUB/WAVE, an open-source internet radio
+server that people run on their own hardware. If you operate a SUB/WAVE
+station, or listen to one you have been given the address of, this app puts it
+on your TV and makes it work from the remote.
 
-Add any station by address — a public one on the internet or a private one on
-your own network — and Wave TV gives it a native TV interface: a station
-picker built for the remote, a full-height now-playing panel, and a
-D-pad navigation layer that makes the station's own web player fully
-operable from the couch.
+It is a client in the same sense as a Plex, Jellyfin or Subsonic app: the
+server belongs to whoever runs it, and this is the screen in front of it.
+
+WHAT IS AND IS NOT INCLUDED
+• No content ships with this app. There is no catalogue, no directory, no search, and no browse or recommendation surface
+• No station list is downloaded from anywhere. The list is empty on first launch and only ever holds server addresses entered on the device
+• No download capability of any kind: one permission (INTERNET), no storage access, and no handoff to an external download tool
+• Once a station is tuned, the player declines to navigate to any host other than that station's own
+• What a SUB/WAVE station broadcasts, and the rights to broadcast it, are the responsibility of whoever operates that station
 
 THE PICKER
-• Add any number of stations; a station's name is adopted automatically if you leave it blank
+• Add the SUB/WAVE servers you listen to; a station's name is adopted automatically if you leave it blank
 • Now-playing at a glance: cover art, track, artist, album, and the show or DJ on air
 • A level meter that moves only while sound is actually playing, so you can see a stalled stream
 • Light, Dark, or Station theme — the last repaints the screen in the colours of whatever is on air
@@ -36,15 +45,15 @@ IN THE PLAYER
 • Sleep timer, one to six hours
 • Hold OK for the menu — nothing requires a Menu button, because not every remote has one
 
-PRIVATE STATIONS AND PRIVACY
+PRIVATE SERVERS AND PRIVACY
 • Works with private stations: both the members-only gate and HTTP basic auth
-• http:// and https:// both permitted, so a station on your LAN works without a certificate
-• One permission: INTERNET. No analytics, no telemetry, no ads, no accounts. Nothing is transmitted anywhere except to the stations you add
+• http:// and https:// both permitted, so a server on your LAN works without a certificate
+• One permission: INTERNET. No analytics, no telemetry, no ads, no accounts. Nothing is transmitted anywhere except to the servers you add
 
-Wave TV is an unofficial, open-source community player for stations built on
-the SUB/WAVE platform. It is not affiliated with or endorsed by the SUB/WAVE
-project. It ships with no stations; you add the ones you listen to. Source
-code: https://github.com/mrain1p/Wave-TV
+Wave TV is an unofficial, open-source community client for the SUB/WAVE
+platform. It is not affiliated with or endorsed by the SUB/WAVE project. It
+ships with no stations; you add the server you listen to. Source code:
+https://github.com/mrain1p/Wave-TV
 
 ## Other listing fields
 
