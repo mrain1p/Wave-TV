@@ -269,6 +269,28 @@ The package identifier is `com.wave.tv`. Earlier private builds used
 earlier build must be uninstalled first and its station list will not carry
 over.
 
+## Content and rights
+
+Wave TV supplies no content, and no way to obtain any. It has no catalogue, no
+directory, no search and no download capability; it connects to the address of
+a SUB/WAVE server you enter, and does nothing else. On first launch it is
+empty.
+
+It is meant for a station you run yourself, or one whose operator has given you
+access — playing material you own, material you have licensed, or material
+that is free to broadcast. Private stations are supported precisely because a
+station is often somebody's own and not meant for the public.
+
+Whoever operates a station is responsible for what it broadcasts and for
+holding the rights to broadcast it. This project supplies none of those rights
+and cannot verify them.
+
+This project does not condone, support or assist copyright infringement, and
+the app is not built in a way that would help: there is no search or
+directory to find infringing streams, no download or recording capability to
+capture them, and no way to reach any host other than the station you tuned.
+Using it to infringe works against its design and gets no help from it.
+
 ## Licence
 
 [MIT](LICENSE). Use it, change it, ship your own build — just keep the notice

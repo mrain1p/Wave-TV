@@ -50,6 +50,19 @@ PRIVATE SERVERS AND PRIVACY
 • http:// and https:// both permitted, so a server on your LAN works without a certificate
 • One permission: INTERNET. No analytics, no telemetry, no ads, no accounts. Nothing is transmitted anywhere except to the servers you add
 
+CONTENT AND RIGHTS
+
+Wave TV supplies no content and no way to obtain any. It has no catalogue, no
+directory, no search and no download capability. It is meant for a station you
+run yourself, or one whose operator has given you access, playing material you
+own, have licensed, or that is free to broadcast. Whoever operates a station is
+responsible for what it broadcasts and for holding the rights to broadcast it.
+
+This project does not condone, support or assist copyright infringement, and
+the app is not built in a way that would help: nothing to search, nothing to
+download or record, and no way to reach any host other than the station you
+tuned.
+
 Wave TV is an unofficial, open-source community client for the SUB/WAVE
 platform. It is not affiliated with or endorsed by the SUB/WAVE project. It
 ships with no stations; you add the server you listen to. Source code:
