@@ -26,9 +26,10 @@ Everything either console asks for is already in this repository:
   machine. For Play it becomes the upload key (recoverable via support if
   lost, since Google holds the real signing key); for Amazon and for
   sideloaders it is still the identity of every future update.
-- [ ] Build both artifacts at the release version (currently 1.4.0 / code 30 —
-  bump both in `app/AndroidManifest.xml` for every store upload; Play refuses
-  a reused versionCode):
+- [ ] Build both artifacts at the release version — read the current one out of
+  `app/AndroidManifest.xml` rather than trusting a number written here, and bump
+  both `versionCode` and `versionName` there for every store upload; Play refuses
+  a reused versionCode:
 
   ```powershell
   powershell -ExecutionPolicy Bypass -File build.ps1
