@@ -115,6 +115,23 @@ https://github.com/mrain1p/Wave-TV
 | Background image 1920×1080 | `background-1920x1080.png` |
 | Screenshots 1920×1080 (3–10) | `screenshots/*.png` (six) |
 
+## Release notes
+
+Wave TV 1.5.0
+
+New artwork
+- Redrawn app icon and launcher tile, including an adaptive icon for launchers
+  that mask or animate it.
+- New Fire TV home-screen banner and new store graphics throughout.
+
+Listing
+- Rewritten to describe the app as what it is: a client for a SUB/WAVE radio
+  server you run yourself, or a public non-commercial station you have the
+  address of. It ships with no stations, no catalogue and no search.
+
+No functional changes: the picker, the player and the remote handling are
+unchanged from 1.4.1.
+
 ## Testing instructions (for the review team)
 
 Enter this address at "+ Add station" — leave the name blank:

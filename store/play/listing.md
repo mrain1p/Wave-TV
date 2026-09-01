@@ -90,16 +90,48 @@ https://github.com/mrain1p/Wave-TV
 
 ## App access → "All or some functionality is restricted" → instructions
 
-The app ships with no stations preloaded — the user adds the station(s) they
-listen to, like a podcast client. To review:
+Enter this address at "+ Add station" — leave the name blank:
 
-1. Open the app and select "+ Add station".
-2. Enter this public demo station address: radio.yosemite.my
-   (leave the name blank; the app adopts the station's own name).
-3. Press OK on the station to tune in. Audio plays; the D-pad navigates the
-   player. Hold OK for the in-player menu (sleep timer, switch station, etc.).
+    getsubwave.com
 
-No account or password is required for the demo station.
+That is the SUB/WAVE project's own public demo station, which broadcasts
+Creative Commons and public-domain music. Press OK to tune in; audio plays and
+the D-pad navigates the player. Hold OK for the in-player menu (sleep timer,
+switch station, reload, exit). No account or password is required.
+
+Enter the bare host. A path such as "getsubwave.com/listen" is the project's
+web page rather than the station API, and the now-playing panel will stay
+empty.
+
+Worth knowing while reviewing:
+
+- The app ships empty. On first launch the station list is blank. There is no
+  catalogue, directory, search or browse surface, and no station list is
+  fetched from anywhere — nothing plays until an address is typed in.
+- The address field is not a general-purpose URL bar. It accepts a host and an
+  optional path only, and rejects query strings, fragments, userinfo and
+  spaces, because the value is concatenated with SUB/WAVE API paths such as
+  "/api/now-playing".
+- One Android permission, INTERNET — the whole of `app/AndroidManifest.xml`.
+  No storage permission, no download or recording code, no handoff to any
+  downloader.
+- Once a station is tuned, navigation to any host other than that station's
+  own is declined, showing "That link leaves the station".
+
+A second station operated by this developer, if a fallback is useful:
+radio.yosemite.my
+
+## Release notes ("What's new", max 500 chars)
+
+New artwork throughout: a redrawn app icon and TV banner, plus an adaptive
+launcher icon for Android 8 and later.
+
+The store listing now describes the app as what it is — a client for a
+SUB/WAVE radio server you run yourself, or a public non-commercial station you
+have the address of. It ships with no stations and no catalogue.
+
+No functional changes: the picker, the player and the remote handling are
+unchanged from 1.4.1.
 
 ## Data safety questionnaire
 
