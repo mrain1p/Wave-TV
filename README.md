@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="art/social-preview-1280x640.png" width="640"
+  <img src="art/social-preview-1280x640.png" width="420"
        alt="Wave TV — an unofficial player for SUB/WAVE stations" />
 </p>
 
@@ -33,6 +33,13 @@ this is only the screen in front of it. SUB/WAVE is an internet *radio* server;
 what a station broadcasts, and the rights to broadcast it, belong to whoever
 operates that station.
 
+In practice that most often means a server on your own home network. Wave TV
+accepts a bare LAN address such as `192.168.1.50:7700`, and permits `http://`
+as well as `https://` precisely so a machine sitting in your own house works
+without a certificate — the traffic never leaves the building. Point it at the
+SUB/WAVE server on your NAS or spare PC and it plays your own library, on your
+own television, over your own network.
+
 The app cannot fetch a file. It holds one Android permission, `INTERNET`, and
 has no download code, no storage access and no handoff to any external
 downloader — see [Permissions and privacy](#permissions-and-privacy). Once a
@@ -55,10 +62,21 @@ page.
 <sub><b>Minimal mode.</b> <code>NP</code> folds the panel down to a single strip and gives the list the full width. The level meter keeps moving only while sound is actually coming out.</sub>
 </td>
 </tr>
+<tr>
+<td width="33%" valign="top">
+<img src="docs/player.jpg" width="100%" alt="A SUB/WAVE web player running fullscreen on a television" /><br />
+<sub><b>Everything past the picker is SUB/WAVE's interface.</b> Masthead, waveform, commentary line, side rail and the operator's theme, unmodified. Wave TV contributes the focus navigation and nothing else.</sub>
+</td>
+<td width="33%" valign="top">
+<img src="docs/request.jpg" width="100%" alt="The SUB/WAVE request drawer, opened with a remote" /><br />
+<sub><b>The request drawer, opened by remote.</b> D-pad navigation lands on the page's real controls; decorative targets are skipped so focus only stops where pressing OK does something.</sub>
+</td>
+<td width="33%" valign="top">
+<img src="docs/keyboard.jpg" width="100%" alt="The television's on-screen keyboard over the request drawer, with press-and-hold-to-speak offered" /><br />
+<sub><b>Typing on a television.</b> OK on a focused field raises the keyboard against the real input; the set-top box's own press-and-hold-to-speak dictation works from there.</sub>
+</td>
+</tr>
 </table>
-<!-- The player, request and keyboard frames are withheld: they showed a
-     commercial release's cover, title and metadata, and the page tint the
-     Station theme samples from that cover. See docs/screenshots.md. -->
 
 ## Features
 
