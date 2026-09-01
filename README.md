@@ -113,30 +113,23 @@ page.
 
 ## Install
 
-Store releases are in preparation. Until one is published, install the
-signed APK below.
+Wave TV is being published to the Google Play Store and the Amazon Appstore.
+Install it from the store on your television — search for **Wave TV**, or open
+the listing on the device:
 
-1. Download `WaveTV.apk` from [Releases](../../releases) and verify its SHA256
-   against the value published there.
+| Store | Device |
+|---|---|
+| Google Play | Android TV and Google TV |
+| Amazon Appstore | Fire TV |
 
-   ```
-   certutil -hashfile WaveTV.apk SHA256      # Windows
-   sha256sum WaveTV.apk                      # Linux
-   ```
-
-2. Enable sideloading:
-   - **Google TV / Android TV** — Settings → System → About → press *Build*
-     seven times, then Settings → System → Developer options → **USB debugging**
-     or **Network debugging**.
-   - **Fire TV** — Settings → My Fire TV → Developer options → **Apps from
-     Unknown Sources**.
-
-3. Transfer and install by either of:
-   - `adb connect <tv-ip>` then `adb install WaveTV.apk`
-   - the **Send Files to TV** app, which needs no computer
+Store links will be added here once each listing is live.
 
 Requires Android 5.1 (API 22) or later. The television must be able to reach
-any station added by LAN address.
+whichever SUB/WAVE server you add, including one on your own network.
+
+Building from source is covered under [Building](#building), and is the
+supported route for anyone who would rather compile it themselves than take a
+store binary.
 
 ## Adding a station
 

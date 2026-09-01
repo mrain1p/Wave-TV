@@ -113,11 +113,10 @@ loads.
 
 ## After launch
 
-- [ ] Update `README.md`'s Install section — it currently says the app is
-  not on any store.
-- [ ] Tag the release (`git tag v1.4.0`) and attach the sideload
-  `WaveTV.apk` + SHA256 to a GitHub release, as before. Sideloading remains
-  supported alongside the stores.
+- [ ] Tag the release (`git tag v1.4.0`) and attach `WaveTV.apk` + SHA256 to a
+  GitHub release, as before, for anyone building or installing outside a
+  store. The README points at the stores and at `## Building`; it no longer
+  walks a reader through installing an APK by hand.
 - [ ] For every subsequent release: bump `versionCode`/`versionName`, rebuild
   both artifacts, upload the `.aab` to Play and the `.apk` to Amazon. The
   stores update independently; neither touches sideloaded installs.
@@ -131,5 +130,5 @@ loads.
   floor for new Fire TV submissions is likewise API 34; Fire OS 16 devices
   will eventually want 36, so expect one targetSdk bump in the app's future.
 - `uses-feature android.software.leanback required="true"` is Play *store
-  filtering*, not an install gate — `adb install` on a phone still works, so
-  the README's sideloading story is unchanged.
+  filtering*, not an install gate — `adb install` on a phone still works, so a
+  hand-installed build behaves exactly as it did before.
