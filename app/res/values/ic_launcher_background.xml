@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Field behind the adaptive launcher icon; the mark's own tile is
+         @mipmap/ic_launcher_foreground, which the launcher masks on top. -->
+    <color name="ic_launcher_background">#0B0B0C</color>
+</resources>

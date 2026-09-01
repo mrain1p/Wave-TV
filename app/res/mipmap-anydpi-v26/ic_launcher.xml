@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 8+ masks the launcher icon to whatever shape the launcher wants,
+     so it needs the mark on its own transparent layer. Older releases (this
+     app still supports API 22) ignore this file and use the flat
+     mipmap-xxxhdpi/ic_launcher.png instead. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>

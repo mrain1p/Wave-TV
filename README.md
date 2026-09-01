@@ -227,7 +227,8 @@ from this repository, as are the keystore and the built APK.
 | `app/java/com/wave/tv/LevelMeter.java` | The five-bar meter beside the transport |
 | `app/java/com/wave/tv/Station.java` | One entry in the picker: a name and an address |
 | `app/assets/tvhelper.js` | Injected into the page — spatial navigation and the JavaScript ↔ native bridge |
-| `app/res/` | Launcher icon, television banner, theme |
+| `app/res/` | Launcher icon (flat and adaptive), television banner, theme |
+| `art/` | Vector sources for the mark, and the GitHub social preview |
 
 The package identifier is `com.wave.tv`. Earlier private builds used
 `com.subwave.tv`; Android treats the two as separate applications, so an
