@@ -117,25 +117,66 @@ https://github.com/mrain1p/Wave-TV
 
 ## Testing instructions (for the review team)
 
+This submission was previously declined under the Deceptive and Malicious
+Behaviour policy, for offering pirated content, linking to sites that stream
+it, or promoting downloads via torrents. None of the three applies, and each
+can be checked directly in the app. The steps below are ordered so the checks
+take about two minutes.
+
 The app ships with no stations preloaded and has no catalogue to browse — the
 reviewer supplies a server address, exactly as a user would with a Plex or
 Subsonic client. The demo address below is a SUB/WAVE server operated by this
 developer, provided so the app can be reviewed without setting one up.
 
-1. Open the app and select "+ Add station".
-2. Enter this demo server address: radio.yosemite.my
+### Basic run-through
+
+1. Open the app. **The station list is empty** — there is no catalogue,
+   directory, search, browse or recommendation surface anywhere in the app,
+   and no station list is fetched from any server. Nothing can play until an
+   address is entered by hand.
+2. Select "+ Add station" and enter: radio.yosemite.my
    (leave the name blank; the app adopts the server's own name).
 3. Press Select to tune in. Audio plays; the D-pad navigates the player. Hold
    Select for the in-player menu (sleep timer, switch station, reload, exit).
 
 No account or password is required for the demo server.
 
-Two behaviours worth noting during review:
+### Checks against the three findings
 
-- The address field is not a general-purpose URL bar. It accepts a host and an
-  optional path only, and rejects query strings, fragments, userinfo and
-  spaces, because the value is concatenated with SUB/WAVE API paths such as
-  "/api/now-playing". An arbitrary URL cannot be expressed in it.
-- After a station is tuned, selecting a link that points off that station's
-  host is declined and shows "That link leaves the station". The app cannot be
-  navigated to a third-party site.
+**"Offers pirated content within the app."** Step 1 above is the check: the
+app ships empty and has no content of its own. Uninstalling and reopening
+returns it to an empty list. There is no bundled, remote or default station.
+
+**"Promotes links to websites that stream pirated content."** Two things to
+try:
+
+- *The address field is not a URL bar.* In "+ Add station", type an ordinary
+  web URL with a query string — for example `example.com/watch?v=123`. It is
+  refused with "An address can't contain "?" or "#"". Userinfo (`@`) and
+  spaces are refused the same way. The field takes a host and an optional path
+  only, because the value is concatenated with SUB/WAVE API paths such as
+  `/api/now-playing`. An arbitrary URL cannot be expressed in it.
+- *The player will not leave the station.* With the demo station tuned, select
+  any link on the page that points at another host, if the station's page
+  offers one. Navigation is declined and the app shows "That link leaves the
+  station — Wave TV stays on the one you tuned". There is no address bar, no
+  back-to-a-different-site path, and no way to reach a third-party site.
+
+**"Promotes downloading via torrents."** The app declares one Android
+permission, INTERNET. It is the entire `uses-permission` set of
+`app/AndroidManifest.xml`, which is public, and being a normal permission it
+never raises a runtime prompt — the app asks the user for nothing at any
+point. There is no storage permission, no download listener, no
+DownloadManager use, no file-writing code, no BitTorrent client or library,
+and no handoff to any external downloader. There is no download or record
+control anywhere in the interface. The app is not capable of saving a file.
+
+### Verifying independently
+
+The app is open source under the MIT licence: https://github.com/mrain1p/Wave-TV
+The complete permission set is `app/AndroidManifest.xml`; the address
+validation is `StationStore.addressProblem`; the off-station block is
+`MainActivity.blockOffStation`.
+
+If any part of this listing or its screenshots suggested otherwise, we are
+glad to revise it — please tell us which element was flagged.
