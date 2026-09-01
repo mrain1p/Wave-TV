@@ -98,7 +98,7 @@ https://github.com/mrain1p/Wave-TV
 | Large icon 512×512 | `icon-512.png` |
 | Fire TV icon 1280×720 | `firetv-icon-1280x720.png` |
 | Background image 1920×1080 | `background-1920x1080.png` |
-| Screenshots 1920×1080 (3–10) | `screenshots/*.png` (six) |
+| Screenshots 1920×1080 (3–10) | `screenshots/` — pending re-capture, see `docs/screenshots.md` |
 
 ## Testing instructions (for the review team)
 

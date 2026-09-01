@@ -40,6 +40,20 @@ station is tuned, the player declines to navigate anywhere off that station's
 own host, so it cannot be steered to a third-party site from inside a loaded
 page.
 
+<!--
+Screenshots are being re-taken.
+
+The previous six frames all showed a commercially released single, with its
+album cover, in the now-playing panel. That reproduces someone else's artwork
+in this repository and misrepresents the app as a way to hear commercial music,
+which is neither what it is for nor something this project can license.
+
+Replacements should show a station playing material the operator holds the
+rights to; art/covers/ has original artwork for the now-playing panel. Restore
+this block once docs/*.jpg have been replaced.
+-->
+
+<!--
 <table>
 <tr>
 <td width="33%" valign="top">
@@ -70,6 +84,7 @@ page.
 </td>
 </tr>
 </table>
+-->
 
 ## Features
 

@@ -10,7 +10,9 @@ Two stores, two artifacts, one codebase:
 Everything either console asks for is already in this repository:
 
 - Listing text, questionnaire answers, reviewer instructions: `store/play/listing.md`, `store/amazon/listing.md`
-- Icons, feature graphic, banner, background, 1920×1080 screenshots: `store/play/`, `store/amazon/`
+- Icons, feature graphic, banner, background: `store/play/`, `store/amazon/`
+- 1920×1080 screenshots: pending re-capture — `docs/screenshots.md` says what to
+  shoot and why the previous set was withdrawn
 - Privacy policy (both consoles require a URL): `PRIVACY.md` — push it, then use
   `https://github.com/mrain1p/Wave-TV/blob/main/PRIVACY.md`
 
