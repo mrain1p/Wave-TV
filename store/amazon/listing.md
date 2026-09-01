@@ -7,8 +7,9 @@
 ## Short description (max 1200 chars, shown on device)
 
 Wave TV is a remote-friendly client for SUB/WAVE, the open-source self-hosted
-internet radio server. Enter the address of a SUB/WAVE server you run or have
-been given access to, and Wave TV gives it a native Fire TV interface: a
+internet radio server. Enter the address of a station you run yourself, or a
+public non-commercial one you have the address of, and Wave TV gives it a
+native Fire TV interface: a
 station picker built for the remote, a now-playing panel with cover art and
 the show on air, and full D-pad navigation of that server's own player. Song
 requests from the remote, voice dictation, a sleep timer and private-station
@@ -19,8 +20,8 @@ starts empty. One permission (INTERNET), no ads, no analytics, no accounts.
 
 Wave TV is a television client for SUB/WAVE, an open-source internet radio
 server that people run on their own hardware. If you operate a SUB/WAVE
-station, or listen to one you have been given the address of, this app puts it
-on a Fire TV and makes it work from the remote.
+station of your own, or listen to a public non-commercial one you have the
+address of, this app puts it on a Fire TV and makes it work from the remote.
 
 It is a client, in the same sense as a Plex, Jellyfin or Subsonic app: the
 server belongs to whoever runs it, and this is the screen in front of it.

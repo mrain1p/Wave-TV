@@ -11,16 +11,16 @@ the distinction store review cares about.)
 
 ## Short description (max 80 chars)
 
-    Remote-friendly client for your own SUB/WAVE internet radio server.
+    Put your own SUB/WAVE internet radio station on your television.
 
-(67 chars.)
+(64 chars.)
 
 ## Full description (max 4000 chars)
 
 Wave TV is a television client for SUB/WAVE, an open-source internet radio
 server that people run on their own hardware. If you operate a SUB/WAVE
-station, or listen to one you have been given the address of, this app puts it
-on your TV and makes it work from the remote.
+station of your own, or listen to a public non-commercial one you have the
+address of, this app puts it on your TV and makes it work from the remote.
 
 It is a client in the same sense as a Plex, Jellyfin or Subsonic app: the
 server belongs to whoever runs it, and this is the screen in front of it.

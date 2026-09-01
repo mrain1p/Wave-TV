@@ -1,19 +1,21 @@
 <p align="center">
   <img src="art/social-preview-1280x640.png" width="420"
-       alt="Wave TV — an unofficial player for SUB/WAVE stations" />
+       alt="Wave TV — an unofficial client for your own SUB/WAVE station" />
 </p>
 
 # Wave TV
 
-**An Android TV and Fire TV player for [SUB/WAVE](https://github.com/perminder-klair/subwave)
-stations.** A native station picker; selecting a station loads that station's
+**An Android TV and Fire TV client for your own
+[SUB/WAVE](https://github.com/perminder-klair/subwave) station** — the one you
+run at home, or a public non-commercial station you have been given the
+address of. A native station picker; selecting a station loads that station's
 own web player fullscreen, driven by the remote. Skins, themes and artwork
 render exactly as they do in a browser, because it *is* the browser player.
 
-This is a shell, not a client. It implements no playback, no theming and no
-station logic of its own — those belong to SUB/WAVE, and the app's job is to
-put them on a television and make a D-pad work where a mouse is assumed. No
-station is bundled; it ships empty.
+This is a shell. It implements no playback, no theming and no station logic of
+its own — those belong to SUB/WAVE, and the app's job is to put them on a
+television and make a D-pad work where a mouse is assumed. No station is
+bundled; it ships empty.
 
 Please note this was created with use of AI. It is an unofficial community
 player, not an official SUB/WAVE release — review the source or build it
@@ -26,10 +28,13 @@ catalogue: there is no library, no directory, no search, no browse or
 recommendation surface, and no station list fetched from anywhere. The list
 starts empty and only ever holds addresses typed in on the device.
 
-Those addresses are expected to be a [SUB/WAVE](https://github.com/perminder-klair/subwave)
-server the listener runs or has been given access to — the same arrangement as
-a Plex, Jellyfin or Subsonic client, where the server is somebody's own and
-this is only the screen in front of it. SUB/WAVE is an internet *radio* server;
+Those addresses are meant to be a [SUB/WAVE](https://github.com/perminder-klair/subwave)
+server you run yourself, or a public non-commercial station whose operator has
+given you the address — the same arrangement as a Plex, Jellyfin or Subsonic
+client, where the server is somebody's own and this is only the screen in
+front of it. The app does not police what you type into the address field, any
+more than a Subsonic client does; that is the use it is built and documented
+for. SUB/WAVE is an internet *radio* server;
 what a station broadcasts, and the rights to broadcast it, belong to whoever
 operates that station.
 
