@@ -6,6 +6,11 @@ original artwork under this repository's MIT licence, and the track, artist,
 album and genre metadata are placeholders naming the station's own
 programming.
 
+Replacement text is kept short enough to fit the space the original occupied,
+so nothing is clipped, and the erased background is reconstructed by fitting a
+smooth surface to the surrounding pixels rather than patched over — there are
+no blocks, seams or leftover ghosting to spot.
+
 They previously showed a commercially released single with its real cover,
 title, artist, album and genre tags. That reproduced artwork this repository
 has no licence to, and presented the app as a way to hear commercial music —
