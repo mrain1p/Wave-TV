@@ -16,8 +16,29 @@ put them on a television and make a D-pad work where a mouse is assumed. No
 station is bundled; it ships empty.
 
 Please note this was created with use of AI. It is an unofficial community
-player, not an official SUB/WAVE release, and it is installed by sideloading —
-review the source or build it yourself if that matters to you.
+player, not an official SUB/WAVE release — review the source or build it
+yourself if that matters to you.
+
+## What it plays
+
+Nothing, until you tell it what to play. Wave TV carries no content and no
+catalogue: there is no library, no directory, no search, no browse or
+recommendation surface, and no station list fetched from anywhere. The list
+starts empty and only ever holds addresses typed in on the device.
+
+Those addresses are expected to be a [SUB/WAVE](https://github.com/perminder-klair/subwave)
+server the listener runs or has been given access to — the same arrangement as
+a Plex, Jellyfin or Subsonic client, where the server is somebody's own and
+this is only the screen in front of it. SUB/WAVE is an internet *radio* server;
+what a station broadcasts, and the rights to broadcast it, belong to whoever
+operates that station.
+
+The app cannot fetch a file. It holds one Android permission, `INTERNET`, and
+has no download code, no storage access and no handoff to any external
+downloader — see [Permissions and privacy](#permissions-and-privacy). Once a
+station is tuned, the player declines to navigate anywhere off that station's
+own host, so it cannot be steered to a third-party site from inside a loaded
+page.
 
 <table>
 <tr>
@@ -92,7 +113,8 @@ review the source or build it yourself if that matters to you.
 
 ## Install
 
-Wave TV is distributed as a sideloaded APK. It is not on any store.
+Store releases are in preparation. Until one is published, install the
+signed APK below.
 
 1. Download `WaveTV.apk` from [Releases](../../releases) and verify its SHA256
    against the value published there.
@@ -109,10 +131,9 @@ Wave TV is distributed as a sideloaded APK. It is not on any store.
    - **Fire TV** — Settings → My Fire TV → Developer options → **Apps from
      Unknown Sources**.
 
-3. Transfer and install by any of:
+3. Transfer and install by either of:
    - `adb connect <tv-ip>` then `adb install WaveTV.apk`
    - the **Send Files to TV** app, which needs no computer
-   - the **Downloader** app on Fire TV, pointed at a URL serving the APK
 
 Requires Android 5.1 (API 22) or later. The television must be able to reach
 any station added by LAN address.
