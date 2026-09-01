@@ -2,9 +2,11 @@
 
 *Effective 31 August 2026*
 
-Wave TV is a television player for SUB/WAVE internet radio stations. This
-policy covers the Wave TV application itself (`com.wave.tv`), as distributed
-on Google Play, the Amazon Appstore, and as a sideloaded APK.
+Wave TV is a television client for SUB/WAVE, an open-source internet radio
+server that people run on their own hardware. This policy covers the Wave TV
+application itself (`com.wave.tv`), as distributed on Google Play, the Amazon
+Appstore, and as a sideloaded APK. It does not cover any SUB/WAVE server you
+connect it to, which is operated by somebody else.
 
 ## What we collect
 
