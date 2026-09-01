@@ -6,11 +6,12 @@
 # Wave TV
 
 **An Android TV and Fire TV client for your own
-[SUB/WAVE](https://github.com/perminder-klair/subwave) station** — the one you
-run at home, or a public non-commercial station you have been given the
-address of. A native station picker; selecting a station loads that station's
-own web player fullscreen, driven by the remote. Skins, themes and artwork
-render exactly as they do in a browser, because it *is* the browser player.
+[SUB/WAVE](https://github.com/perminder-klair/subwave) station** — enjoy your
+personal station at home, or a public non-commercial station you have been
+given the address of. A native station picker; selecting a station loads that
+station's own web player fullscreen, driven by the remote. Skins, themes and
+artwork render exactly as they do in a browser, because it *is* the browser
+player.
 
 This is a shell. It implements no playback, no theming and no station logic of
 its own — those belong to SUB/WAVE, and the app's job is to put them on a
@@ -32,9 +33,7 @@ Those addresses are meant to be a [SUB/WAVE](https://github.com/perminder-klair/
 server you run yourself, or a public non-commercial station whose operator has
 given you the address — the same arrangement as a Plex, Jellyfin or Subsonic
 client, where the server is somebody's own and this is only the screen in
-front of it. The app does not police what you type into the address field, any
-more than a Subsonic client does; that is the use it is built and documented
-for. SUB/WAVE is an internet *radio* server;
+front of it. SUB/WAVE is an internet *radio* server;
 what a station broadcasts, and the rights to broadcast it, belong to whoever
 operates that station.
 
