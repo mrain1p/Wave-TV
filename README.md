@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="art/social-preview-1280x640.png" width="640"
+       alt="Wave TV — an unofficial player for SUB/WAVE stations" />
+</p>
+
 # Wave TV
 
 **An Android TV and Fire TV player for [SUB/WAVE](https://github.com/perminder-klair/subwave)
