@@ -136,15 +136,16 @@ unchanged from 1.4.1.
 
 Enter this address at "+ Add station" — leave the name blank:
 
-    getsubwave.com
+    www.getsubwave.com
 
 That is the SUB/WAVE project's own public demo station, which broadcasts
 Creative Commons and public-domain music. Press Select to tune in; audio
 plays and the D-pad navigates the player. Hold Select for the in-player menu.
 No account or password is needed.
 
-(Enter the bare host. A path such as "getsubwave.com/listen" is the web page,
-not the station API, and the now-playing panel will stay empty.)
+(Enter the host exactly as above. A path such as "www.getsubwave.com/listen"
+is the web page rather than the station API, and the now-playing panel will
+stay empty.)
 
 Three things this makes checkable, against the previous rejection:
 

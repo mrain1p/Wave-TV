@@ -133,8 +133,24 @@ class StationStore {
     static boolean sameHost(String host, String stationUrl) {
         if (host == null) return false;
         String station = hostOf(stationUrl);
-        return station != null
-                && station.equals(host.split(":", 2)[0].toLowerCase(Locale.US));
+        if (station == null) return false;
+        return withoutWww(station)
+                .equals(withoutWww(host.split(":", 2)[0].toLowerCase(Locale.US)));
+    }
+
+    /**
+     * "www.name" and "name" are the same station.
+     *
+     * Typing the bare host is the natural thing to do, and a great many servers
+     * answer it with a permanent redirect to the www form — getsubwave.com does
+     * exactly that. Compared strictly, the station's own redirect looks like a
+     * different host, so the player refused to follow it and the viewer got
+     * "That link leaves the station" on the address they had just been given.
+     * The two names are the same registrable domain under the same operator,
+     * which is the thing sameHost is actually asking about.
+     */
+    private static String withoutWww(String host) {
+        return host.startsWith("www.") ? host.substring(4) : host;
     }
 
     /**

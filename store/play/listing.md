@@ -92,16 +92,16 @@ https://github.com/mrain1p/Wave-TV
 
 Enter this address at "+ Add station" — leave the name blank:
 
-    getsubwave.com
+    www.getsubwave.com
 
 That is the SUB/WAVE project's own public demo station, which broadcasts
 Creative Commons and public-domain music. Press OK to tune in; audio plays and
 the D-pad navigates the player. Hold OK for the in-player menu (sleep timer,
 switch station, reload, exit). No account or password is required.
 
-Enter the bare host. A path such as "getsubwave.com/listen" is the project's
-web page rather than the station API, and the now-playing panel will stay
-empty.
+Enter the host exactly as above. A path such as "www.getsubwave.com/listen"
+is the project's web page rather than the station API, and the now-playing
+panel will stay empty.
 
 Worth knowing while reviewing:
 
