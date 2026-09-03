@@ -92,16 +92,15 @@ https://github.com/mrain1p/Wave-TV
 
 Enter this address at "+ Add station" — leave the name blank:
 
-    www.getsubwave.com
+    live.yosemite.my
 
-That is the SUB/WAVE project's own public demo station, which broadcasts
-Creative Commons and public-domain music. Press OK to tune in; audio plays and
+That is a SUB/WAVE station operated by this developer, provided so the app
+can be reviewed without setting a server up. Press OK to tune in; audio plays and
 the D-pad navigates the player. Hold OK for the in-player menu (sleep timer,
 switch station, reload, exit). No account or password is required.
 
-Enter the host exactly as above. A path such as "www.getsubwave.com/listen"
-is the project's web page rather than the station API, and the now-playing
-panel will stay empty.
+Enter the host exactly as above, with no path - use the https:// button
+beside the field to set the scheme.
 
 Worth knowing while reviewing:
 
@@ -118,8 +117,6 @@ Worth knowing while reviewing:
 - Once a station is tuned, navigation to any host other than that station's
   own is declined, showing "That link leaves the station".
 
-A second station operated by this developer, if a fallback is useful:
-radio.yosemite.my
 
 ## Release notes ("What's new", max 500 chars)
 
