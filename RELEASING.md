@@ -19,7 +19,8 @@ Everything either console asks for is already in this repository:
 ## Before either submission
 
 - [ ] **Verify the demo station.** The reviewer instructions point at
-  `radio.yosemite.my`. Confirm it is up, public (no password), and playing —
+  the demo station named in the submission form. Confirm it is up, public (no
+  password), and playing —
   a reviewer who lands on a dead address will reject for "app does not
   function". If you'd rather not use your own station, substitute any public
   SUB/WAVE station and update both listing files.

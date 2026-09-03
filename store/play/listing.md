@@ -92,10 +92,11 @@ https://github.com/mrain1p/Wave-TV
 
 Enter this address at "+ Add station" — leave the name blank:
 
-    live.yosemite.my
+    [demo station address — see console]
 
-That is a SUB/WAVE station operated by this developer, provided so the app
-can be reviewed without setting a server up. Press OK to tune in; audio plays and
+That is a SUB/WAVE station operated by this developer, provided so the app can
+be reviewed without setting a server up. The address itself is filled in on the
+submission form rather than published here. Press OK to tune in; audio plays and
 the D-pad navigates the player. Hold OK for the in-player menu (sleep timer,
 switch station, reload, exit). No account or password is required.
 

@@ -136,10 +136,11 @@ unchanged from 1.4.1.
 
 Enter this address at "+ Add station" — leave the name blank:
 
-    live.yosemite.my
+    [demo station address — see console]
 
-That is a SUB/WAVE station operated by this developer, provided so the app
-can be reviewed without setting a server up. Press Select to tune in; audio
+That is a SUB/WAVE station operated by this developer, provided so the app can
+be reviewed without setting a server up. The address itself is filled in on the
+submission form rather than published here. Press Select to tune in; audio
 plays and the D-pad navigates the player. Hold Select for the in-player menu.
 No account or password is needed.
 
