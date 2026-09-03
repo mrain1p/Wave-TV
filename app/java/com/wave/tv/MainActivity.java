@@ -2192,6 +2192,18 @@ public class MainActivity extends Activity {
      * reached when showSoftInput has just told us there isn't one.
      */
     private void activateField(final EditText e) {
+        // The field already holds focus: the key listener below only fires on
+        // the focused view, and a click can only land on it once focus is
+        // there. So requestFocus() on its own returns true without a focus
+        // change ever happening, and the framework's own show-the-IME-on-focus
+        // path — the one a television keyboard actually answers — never runs.
+        // Everything then rested on showSoftInput, which Fire TV may decline
+        // silently by returning true and showing nothing.
+        //
+        // Give up focus and take it again so that path fires. Order matters:
+        // the focus listener disarms setShowSoftInputOnFocus when focus is
+        // lost, so the flag has to be set after clearFocus, not before it.
+        if (e.hasFocus()) e.clearFocus();
         e.setShowSoftInputOnFocus(true);
         e.requestFocus();
         e.post(() -> {
